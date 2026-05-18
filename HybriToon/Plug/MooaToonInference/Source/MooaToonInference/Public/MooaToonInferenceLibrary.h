@@ -40,6 +40,37 @@ struct FMooaToonParams
 	float WidthScale = 1.f;
 };
 
+/**
+ * 由参考图直方图分析得到的"风格化"目标参数。
+ * 这些是绝对目标值（Intensity=1 时完全应用，=0 时退化到中性 1.0），
+ * 实际写入 PostProcess 时由 ApplyStyleToWorld 内部按 Intensity 做 Lerp。
+ */
+USTRUCT(BlueprintType)
+struct FMooaToonStyleParams
+{
+	GENERATED_BODY()
+
+	/** 主色调（参考图 RGB 平均值，已归一化到 [0,1]） */
+	UPROPERTY(BlueprintReadOnly, Category = "MooaToon|Style")
+	FLinearColor DominantColor = FLinearColor::White;
+
+	/** PostProcess.ColorSaturation 目标值（中性 1.0；>1 更鲜艳，<1 更灰） */
+	UPROPERTY(BlueprintReadOnly, Category = "MooaToon|Style")
+	float TargetSaturation = 1.f;
+
+	/** PostProcess.ColorContrast 目标值（中性 1.0；>1 对比更强） */
+	UPROPERTY(BlueprintReadOnly, Category = "MooaToon|Style")
+	float TargetContrast = 1.f;
+
+	/** PostProcess.ColorGain 的 RGB 偏色（已归一化保持亮度，A 通道恒为 1） */
+	UPROPERTY(BlueprintReadOnly, Category = "MooaToon|Style")
+	FLinearColor TargetGain = FLinearColor::White;
+
+	/** 是否已经分析过（false 时 ApplyStyleToWorld 直接走中性参数） */
+	UPROPERTY(BlueprintReadOnly, Category = "MooaToon|Style")
+	bool bValid = false;
+};
+
 UCLASS()
 class MOOATOONINFERENCE_API UMooaToonInferenceLibrary : public UBlueprintFunctionLibrary
 {
@@ -129,5 +160,35 @@ public:
 		UNNEModelData* ModelData,
 		AActor* TargetActor,
 		int32 ElementIndex = -1
+	);
+
+	/**
+	 * 用简单颜色直方图分析参考图，提取主色调 + 推断目标饱和度/对比度。
+	 * 算法（保持简单）：
+	 *   - 缩放到 64×64
+	 *   - 累计 RGB 均值     → DominantColor
+	 *   - 累计 max-min       → 目标饱和度（HSV 风格的近似值）
+	 *   - 累计亮度均值/方差   → 目标对比度（基于亮度标准差）
+	 *   - DominantColor 归一化到平均亮度 → TargetGain（避免整体变暗/变亮）
+	 *
+	 * @param ImagePath 参考图绝对路径（PNG / JPG）
+	 * @param OutStyle  分析得到的目标值；bValid=true 表示成功
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MooaToon|Style")
+	static bool AnalyzeImageStyle(const FString& ImagePath, FMooaToonStyleParams& OutStyle);
+
+	/**
+	 * 把风格参数写入场景里所有的 PostProcessVolume。
+	 * 找不到任何 PPV 时，自动 Spawn 一个 Unbound 的（Tag = MooaToonAutoPPV），方便后续清理/复用。
+	 *
+	 * @param WorldContextObject 任何能拿到 World 的对象（widget / actor 都行）
+	 * @param Style              AnalyzeImageStyle 的结果
+	 * @param Intensity          0~1；0 = 完全中性（ColorGrading 关闭 override），1 = 完全应用 Style
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MooaToon|Style", meta = (WorldContext = "WorldContextObject"))
+	static void ApplyStyleToWorld(
+		UObject* WorldContextObject,
+		const FMooaToonStyleParams& Style,
+		float Intensity = 1.f
 	);
 };

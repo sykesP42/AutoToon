@@ -83,6 +83,14 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "MooaToon|Params")
     float WidthScale = 1.0f;
 
+    /** 后处理风格强度：0=不影响后处理，1=完全应用参考图风格 */
+    UPROPERTY(BlueprintReadOnly, Category = "MooaToon|Params")
+    float StyleIntensity = 0.5f;
+
+    /** 上一次 AnalyzeImageStyle 的结果；点击"分析参考图"按钮后填充 */
+    UPROPERTY(BlueprintReadOnly, Category = "MooaToon|Params")
+    FMooaToonStyleParams CachedStyle;
+
     // =========================================================================
     // 区域 3：BindWidget 控件
     // =========================================================================
@@ -105,6 +113,10 @@ public:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<USlider> Slider_WidthScale;
 
+    /** 后处理风格强度（0~1） */
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<USlider> Slider_StyleIntensity;
+
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UTextBlock> Text_R;
 
@@ -122,6 +134,9 @@ public:
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UTextBlock> Text_WidthScale;
+
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UTextBlock> Text_StyleIntensity;
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UImage> Img_ColorPreview;
@@ -143,6 +158,10 @@ public:
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UButton> Btn_ExportCSV;
+
+    /** 点击后扫描参考图直方图 → 立即按当前 StyleIntensity 写入 PostProcess */
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UButton> Btn_AnalyzeStyle;
 
     // =========================================================================
     // 区域 4：蓝图可调用接口
@@ -188,6 +207,7 @@ protected:
     // =========================================================================
 private:
     void Internal_ApplyToMaterial();
+    void Internal_ApplyStyle();
     void Internal_RefreshUI();
     void Internal_SetStatus(const FString& Msg, bool bError = false);
 
@@ -203,6 +223,8 @@ private:
     void OnSlider_RimLightWidth_Changed(float Value);
     UFUNCTION()
     void OnSlider_WidthScale_Changed(float Value);
+    UFUNCTION()
+    void OnSlider_StyleIntensity_Changed(float Value);
 
     UFUNCTION()
     void OnBtn_Apply_Clicked();
@@ -212,6 +234,8 @@ private:
     void OnBtn_RunInference_Clicked();
     UFUNCTION()
     void OnBtn_ExportCSV_Clicked();
+    UFUNCTION()
+    void OnBtn_AnalyzeStyle_Clicked();
 
     UFUNCTION()
     void OnTextBox_ImagePath_Changed(const FText& Text);

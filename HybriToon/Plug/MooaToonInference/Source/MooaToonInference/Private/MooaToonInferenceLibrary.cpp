@@ -18,6 +18,10 @@
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
 #include "Engine/Texture2D.h"
+#include "Engine/Engine.h"
+#include "Engine/PostProcessVolume.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMooaToon, Log, All);
 
@@ -425,4 +429,207 @@ bool UMooaToonInferenceLibrary::InferFromExampleDir(
 
 	// 推理 + 写入材质
 	return InferAndApply(ModelData, InputPixels, TargetActor, ElementIndex);
+}
+
+// =============================================================================
+// 风格化：直方图分析 + PostProcess 应用
+// =============================================================================
+
+bool UMooaToonInferenceLibrary::AnalyzeImageStyle(const FString& ImagePath, FMooaToonStyleParams& OutStyle)
+{
+	OutStyle = FMooaToonStyleParams{};
+
+	// 1. 读取文件 + 解码（与 LoadImageToPixels 同套流程，但跳过 ImageNet 归一化）
+	TArray<uint8> FileData;
+	if (!FFileHelper::LoadFileToArray(FileData, *ImagePath))
+	{
+		UE_LOG(LogMooaToon, Error, TEXT("[MooaToon] AnalyzeImageStyle: 无法读取 %s"), *ImagePath);
+		return false;
+	}
+
+	IImageWrapperModule& ImageWrapperModule =
+		FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+
+	const EImageFormat Format = ImageWrapperModule.DetectImageFormat(FileData.GetData(), FileData.Num());
+	if (Format == EImageFormat::Invalid)
+	{
+		UE_LOG(LogMooaToon, Error, TEXT("[MooaToon] AnalyzeImageStyle: 不支持的格式 %s"), *ImagePath);
+		return false;
+	}
+
+	TSharedPtr<IImageWrapper> Wrapper = ImageWrapperModule.CreateImageWrapper(Format);
+	if (!Wrapper.IsValid() || !Wrapper->SetCompressed(FileData.GetData(), FileData.Num()))
+	{
+		UE_LOG(LogMooaToon, Error, TEXT("[MooaToon] AnalyzeImageStyle: 解码失败 %s"), *ImagePath);
+		return false;
+	}
+
+	TArray<uint8> Raw;
+	if (!Wrapper->GetRaw(ERGBFormat::RGBA, 8, Raw))
+	{
+		UE_LOG(LogMooaToon, Error, TEXT("[MooaToon] AnalyzeImageStyle: GetRaw 失败"));
+		return false;
+	}
+
+	const int32 SrcW = Wrapper->GetWidth();
+	const int32 SrcH = Wrapper->GetHeight();
+	if (SrcW <= 0 || SrcH <= 0)
+	{
+		return false;
+	}
+
+	// 2. 用步进采样代替缩放：均匀取 ~64×64 个像素，避免完整 resize 的开销
+	constexpr int32 SampleSide = 64;
+	const int32 StepX = FMath::Max(1, SrcW / SampleSide);
+	const int32 StepY = FMath::Max(1, SrcH / SampleSide);
+
+	double SumR = 0.0, SumG = 0.0, SumB = 0.0;
+	double SumLum = 0.0, SumLumSq = 0.0;
+	double SumChromaRange = 0.0;  // max(R,G,B) - min(R,G,B)，HSV 饱和度的近似分子
+	int32  N = 0;
+
+	for (int32 Y = 0; Y < SrcH; Y += StepY)
+	{
+		for (int32 X = 0; X < SrcW; X += StepX)
+		{
+			const int32 Idx = (Y * SrcW + X) * 4;
+			const float R = Raw[Idx + 0] / 255.f;
+			const float G = Raw[Idx + 1] / 255.f;
+			const float B = Raw[Idx + 2] / 255.f;
+
+			SumR += R;
+			SumG += G;
+			SumB += B;
+
+			const float Lum = 0.299f * R + 0.587f * G + 0.114f * B;
+			SumLum   += Lum;
+			SumLumSq += Lum * Lum;
+
+			const float MaxC = FMath::Max3(R, G, B);
+			const float MinC = FMath::Min3(R, G, B);
+			SumChromaRange += (MaxC - MinC);
+
+			++N;
+		}
+	}
+
+	if (N == 0)
+	{
+		return false;
+	}
+
+	const double InvN = 1.0 / N;
+	const float MeanR = static_cast<float>(SumR * InvN);
+	const float MeanG = static_cast<float>(SumG * InvN);
+	const float MeanB = static_cast<float>(SumB * InvN);
+	const float MeanLum = static_cast<float>(SumLum * InvN);
+	const float VarLum = FMath::Max(0.f, static_cast<float>(SumLumSq * InvN) - MeanLum * MeanLum);
+	const float StdLum = FMath::Sqrt(VarLum);            // 自然范围 ~[0, 0.5]
+	const float MeanChroma = static_cast<float>(SumChromaRange * InvN);  // ~[0, 1]
+
+	// 3. 把统计量映射到 PostProcess 目标值
+	//    饱和度：参考图越多彩 → 目标饱和度越高。MeanChroma 的常见范围约 0~0.5，乘以 2 后再围绕 1.0 摆动。
+	OutStyle.TargetSaturation = FMath::Clamp(0.5f + MeanChroma * 2.0f, 0.5f, 1.8f);
+
+	//    对比度：亮度标准差越大 → 原图对比度越高，按比例增强。
+	OutStyle.TargetContrast = FMath::Clamp(0.7f + StdLum * 2.5f, 0.7f, 1.6f);
+
+	//    主色调：RGB 均值；TargetGain 归一化到平均亮度，避免整体变暗/变亮，只保留色偏。
+	OutStyle.DominantColor = FLinearColor(MeanR, MeanG, MeanB, 1.f);
+	const float SafeLum = FMath::Max(MeanLum, 1e-3f);
+	OutStyle.TargetGain = FLinearColor(
+		MeanR / SafeLum,
+		MeanG / SafeLum,
+		MeanB / SafeLum,
+		1.f);
+
+	OutStyle.bValid = true;
+
+	UE_LOG(LogMooaToon, Log,
+		TEXT("[MooaToon] AnalyzeImageStyle: Dom=(%.3f,%.3f,%.3f) Sat=%.3f Con=%.3f Gain=(%.3f,%.3f,%.3f)"),
+		MeanR, MeanG, MeanB,
+		OutStyle.TargetSaturation, OutStyle.TargetContrast,
+		OutStyle.TargetGain.R, OutStyle.TargetGain.G, OutStyle.TargetGain.B);
+
+	return true;
+}
+
+void UMooaToonInferenceLibrary::ApplyStyleToWorld(
+	UObject* WorldContextObject,
+	const FMooaToonStyleParams& Style,
+	float Intensity)
+{
+	UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull) : nullptr;
+	if (!World)
+	{
+		UE_LOG(LogMooaToon, Warning, TEXT("[MooaToon] ApplyStyleToWorld: 拿不到 World"));
+		return;
+	}
+
+	const float T = FMath::Clamp(Intensity, 0.f, 1.f);
+
+	// Style 无效时，等同于 Intensity=0：所有目标都退化到中性 1.0
+	const float TargetSat = Style.bValid ? Style.TargetSaturation : 1.f;
+	const float TargetCon = Style.bValid ? Style.TargetContrast   : 1.f;
+	const FLinearColor TargetGain = Style.bValid ? Style.TargetGain : FLinearColor::White;
+
+	const float ApplySat = FMath::Lerp(1.f, TargetSat, T);
+	const float ApplyCon = FMath::Lerp(1.f, TargetCon, T);
+	const FLinearColor ApplyGain(
+		FMath::Lerp(1.f, TargetGain.R, T),
+		FMath::Lerp(1.f, TargetGain.G, T),
+		FMath::Lerp(1.f, TargetGain.B, T),
+		1.f);
+
+	auto WriteToVolume = [&](APostProcessVolume* PPV)
+	{
+		if (!PPV) return;
+		FPostProcessSettings& S = PPV->Settings;
+
+		S.bOverride_ColorSaturation = true;
+		S.ColorSaturation = FVector4(ApplySat, ApplySat, ApplySat, 1.f);
+
+		S.bOverride_ColorContrast = true;
+		S.ColorContrast = FVector4(ApplyCon, ApplyCon, ApplyCon, 1.f);
+
+		S.bOverride_ColorGain = true;
+		S.ColorGain = FVector4(ApplyGain.R, ApplyGain.G, ApplyGain.B, 1.f);
+	};
+
+	// 1. 写入场景里所有现成的 PPV
+	int32 Count = 0;
+	APostProcessVolume* AutoPPV = nullptr;
+	static const FName AutoPPVTag(TEXT("MooaToonAutoPPV"));
+
+	for (TActorIterator<APostProcessVolume> It(World); It; ++It)
+	{
+		APostProcessVolume* PPV = *It;
+		WriteToVolume(PPV);
+		++Count;
+		if (PPV->ActorHasTag(AutoPPVTag))
+		{
+			AutoPPV = PPV;
+		}
+	}
+
+	// 2. 一个 PPV 都没有 → spawn 一个 Unbound 的兜底
+	if (Count == 0)
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		AutoPPV = World->SpawnActor<APostProcessVolume>(APostProcessVolume::StaticClass(), FTransform::Identity, Params);
+		if (AutoPPV)
+		{
+			AutoPPV->bUnbound = true;
+			AutoPPV->Priority = 1.f;
+			AutoPPV->Tags.Add(AutoPPVTag);
+			WriteToVolume(AutoPPV);
+			++Count;
+			UE_LOG(LogMooaToon, Log, TEXT("[MooaToon] ApplyStyleToWorld: 场景无 PPV，已自动创建 Unbound PPV"));
+		}
+	}
+
+	UE_LOG(LogMooaToon, Log,
+		TEXT("[MooaToon] ApplyStyleToWorld: Intensity=%.2f → Sat=%.3f Con=%.3f Gain=(%.3f,%.3f,%.3f)，写入 %d 个 PPV"),
+		T, ApplySat, ApplyCon, ApplyGain.R, ApplyGain.G, ApplyGain.B, Count);
 }

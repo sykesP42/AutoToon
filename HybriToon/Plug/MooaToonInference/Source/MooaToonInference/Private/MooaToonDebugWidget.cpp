@@ -24,12 +24,14 @@ void UMooaToonDebugWidget::NativeConstruct()
     if (Slider_Specular)      Slider_Specular->OnValueChanged.AddDynamic(this, &UMooaToonDebugWidget::OnSlider_Specular_Changed);
     if (Slider_RimLightWidth) Slider_RimLightWidth->OnValueChanged.AddDynamic(this, &UMooaToonDebugWidget::OnSlider_RimLightWidth_Changed);
     if (Slider_WidthScale)    Slider_WidthScale->OnValueChanged.AddDynamic(this, &UMooaToonDebugWidget::OnSlider_WidthScale_Changed);
+    if (Slider_StyleIntensity) Slider_StyleIntensity->OnValueChanged.AddDynamic(this, &UMooaToonDebugWidget::OnSlider_StyleIntensity_Changed);
 
     // ── 绑定按钮 ──────────────────────────────────────────────────────────────
     if (Btn_Apply)        Btn_Apply->OnClicked.AddDynamic(this, &UMooaToonDebugWidget::OnBtn_Apply_Clicked);
     if (Btn_Reset)        Btn_Reset->OnClicked.AddDynamic(this, &UMooaToonDebugWidget::OnBtn_Reset_Clicked);
     if (Btn_RunInference) Btn_RunInference->OnClicked.AddDynamic(this, &UMooaToonDebugWidget::OnBtn_RunInference_Clicked);
     if (Btn_ExportCSV)    Btn_ExportCSV->OnClicked.AddDynamic(this, &UMooaToonDebugWidget::OnBtn_ExportCSV_Clicked);
+    if (Btn_AnalyzeStyle) Btn_AnalyzeStyle->OnClicked.AddDynamic(this, &UMooaToonDebugWidget::OnBtn_AnalyzeStyle_Clicked);
 
     // ── 绑定路径输入框 ────────────────────────────────────────────────────────
     if (TextBox_ImagePath)
@@ -55,6 +57,7 @@ void UMooaToonDebugWidget::NativeConstruct()
     InitSlider(Slider_Specular,      0.f,  1.f, Specular);
     InitSlider(Slider_RimLightWidth, 0.f,  1.f, RimLightWidth);
     InitSlider(Slider_WidthScale,    0.5f, 3.f, WidthScale, 0.05f);
+    InitSlider(Slider_StyleIntensity, 0.f, 1.f, StyleIntensity);
 
     Internal_RefreshUI();
     Internal_SetStatus(TEXT("就绪。拖动滑条实时预览效果。"));
@@ -68,11 +71,13 @@ void UMooaToonDebugWidget::NativeDestruct()
     if (Slider_Specular)      Slider_Specular->OnValueChanged.RemoveAll(this);
     if (Slider_RimLightWidth) Slider_RimLightWidth->OnValueChanged.RemoveAll(this);
     if (Slider_WidthScale)    Slider_WidthScale->OnValueChanged.RemoveAll(this);
+    if (Slider_StyleIntensity) Slider_StyleIntensity->OnValueChanged.RemoveAll(this);
 
     if (Btn_Apply)        Btn_Apply->OnClicked.RemoveAll(this);
     if (Btn_Reset)        Btn_Reset->OnClicked.RemoveAll(this);
     if (Btn_RunInference) Btn_RunInference->OnClicked.RemoveAll(this);
     if (Btn_ExportCSV)    Btn_ExportCSV->OnClicked.RemoveAll(this);
+    if (Btn_AnalyzeStyle) Btn_AnalyzeStyle->OnClicked.RemoveAll(this);
 
     if (TextBox_ImagePath) TextBox_ImagePath->OnTextChanged.RemoveAll(this);
 
@@ -125,6 +130,13 @@ void UMooaToonDebugWidget::OnSlider_WidthScale_Changed(float Value)
     Internal_ApplyToMaterial();
 }
 
+void UMooaToonDebugWidget::OnSlider_StyleIntensity_Changed(float Value)
+{
+    StyleIntensity = Value;
+    Internal_RefreshUI();
+    Internal_ApplyStyle();
+}
+
 // =============================================================================
 // 按钮回调
 // =============================================================================
@@ -148,6 +160,38 @@ void UMooaToonDebugWidget::OnBtn_RunInference_Clicked()
 void UMooaToonDebugWidget::OnBtn_ExportCSV_Clicked()
 {
     ExportParamsToCSV();
+}
+
+void UMooaToonDebugWidget::OnBtn_AnalyzeStyle_Clicked()
+{
+    // 同步 TextBox 里的最新路径（与 RunInference 行为保持一致）
+    if (TextBox_ImagePath && !TextBox_ImagePath->GetText().IsEmpty())
+        ImagePath = TextBox_ImagePath->GetText().ToString();
+
+    ImagePath.TrimStartAndEndInline();
+    if (ImagePath.StartsWith(TEXT("\"")) && ImagePath.EndsWith(TEXT("\"")))
+        ImagePath = ImagePath.Mid(1, ImagePath.Len() - 2);
+
+    if (ImagePath.IsEmpty())
+    {
+        Internal_SetStatus(TEXT("错误：ImagePath 为空，无法分析风格。"), true);
+        return;
+    }
+
+    if (!UMooaToonInferenceLibrary::AnalyzeImageStyle(ImagePath, CachedStyle))
+    {
+        Internal_SetStatus(TEXT("错误：风格分析失败，请检查图片路径与格式。"), true);
+        return;
+    }
+
+    Internal_ApplyStyle();
+
+    const FString Msg = FString::Printf(
+        TEXT("风格分析完成\nDom=(%.2f,%.2f,%.2f) Sat=%.2f Con=%.2f\nIntensity=%.2f"),
+        CachedStyle.DominantColor.R, CachedStyle.DominantColor.G, CachedStyle.DominantColor.B,
+        CachedStyle.TargetSaturation, CachedStyle.TargetContrast, StyleIntensity);
+    Internal_SetStatus(Msg);
+    UE_LOG(LogMooaToonUI, Log, TEXT("[MooaToonUI] %s"), *Msg);
 }
 
 void UMooaToonDebugWidget::OnTextBox_ImagePath_Changed(const FText& Text)
@@ -408,6 +452,11 @@ void UMooaToonDebugWidget::Internal_ApplyToMaterial()
         /*ElementIndex=*/-1);
 }
 
+void UMooaToonDebugWidget::Internal_ApplyStyle()
+{
+    UMooaToonInferenceLibrary::ApplyStyleToWorld(this, CachedStyle, StyleIntensity);
+}
+
 void UMooaToonDebugWidget::Internal_RefreshUI()
 {
     auto SetText = [](UTextBlock* TB, float Val)
@@ -421,6 +470,7 @@ void UMooaToonDebugWidget::Internal_RefreshUI()
     SetText(Text_Specular,      Specular);
     SetText(Text_RimLightWidth, RimLightWidth);
     SetText(Text_WidthScale,    WidthScale);
+    SetText(Text_StyleIntensity, StyleIntensity);
 
     if (Img_ColorPreview)
     {
