@@ -1,0 +1,30 @@
+# UE5 插件编译产物（每个人本地编译，不入库）
+plugin/MooaToonInference/Binaries/
+plugin/MooaToonInference/Intermediate/
+plugin/MooaToonInference/Content/__ExternalActors__/
+plugin/MooaToonInference/Content/__ExternalObjects__/
+
+# ONNX 训练产物（体积大）
+training/mooatoon_model.pth
+training/mooatoon_model.onnx
+
+# 数据集（体积大，通过文档说明获取）
+data/images/
+data/*.7z.*
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# Studio 运行时
+Studio/__pycache__/
+
+# 风格预设（用户生成）
+presets/*.style
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/

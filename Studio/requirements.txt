@@ -1,0 +1,16 @@
+# HybriToon Studio — 独立程序依赖
+# 最小依赖集，仅包含运行时必需的包
+
+# UI 框架
+dearpygui>=1.10
+
+# ONNX 推理
+onnxruntime>=1.16
+
+# 图像处理
+opencv-python>=4.8
+pillow>=10.0
+numpy>=1.24
+
+# HTTP 通信
+requests>=2.31
