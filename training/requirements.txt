@@ -1,5 +1,5 @@
 
-# HybriToon - AI增强实时三渲二渲染系统
+# AutoToon - AI增强实时三渲二渲染系统
 # Day1: Python环境配置
 
 # 核心深度学习框架

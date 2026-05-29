@@ -1,6 +1,6 @@
 
 """
-HybriToon - MooaToon 材质参数定义
+AutoToon - MooaToon 材质参数定义
 Day1: 研究MooaToon材质参数列表 & 设计参数向量结构
 
 基于官方文档和MToon参考实现设计的完整参数体系
@@ -95,7 +95,7 @@ class MooaToonMaterialParams:
     """
     MooaToon 完整材质参数集合
     
-    这是HybriToon风格编码器的输出目标，
+    这是AutoToon风格编码器的输出目标，
     包含从参考图中可学习的所有可控参数。
     """
     color: ColorParams = field(default_factory=ColorParams)
@@ -344,7 +344,7 @@ def get_all_style_presets():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("HybriToon - MooaToon 材质参数定义")
+    print("AutoToon - MooaToon 材质参数定义")
     print("=" * 60)
     
     default_params = MooaToonMaterialParams()

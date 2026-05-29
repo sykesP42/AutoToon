@@ -1,5 +1,5 @@
 // MooaToon HTTP Server
-// 在 127.0.0.1:8080 启动本地 HTTP 服务，供 HybriToonStudio 发送风格参数。
+// 在 127.0.0.1:8080 启动本地 HTTP 服务，供 AutoToonStudio 发送风格参数。
 
 #pragma once
 

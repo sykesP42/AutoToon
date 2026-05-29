@@ -313,7 +313,7 @@ def _create_placeholder_texture(tag: str, w: int = 384, h: int = 384):
 def build_ui():
     """构建 Dear PyGui 界面"""
     dpg.create_context()
-    dpg.create_viewport(title="HybriToon Studio", width=1280, height=800)
+    dpg.create_viewport(title="AutoToon Studio", width=1280, height=800)
 
     # 全局主题：暗黑风格
     with dpg.theme() as global_theme:
@@ -446,7 +446,7 @@ def build_ui():
 
 
 def run(onnx_path: str = None):
-    """启动 HybriToon Studio"""
+    """启动 AutoToon Studio"""
     build_ui()
 
     # 初始化引擎
@@ -460,7 +460,7 @@ def run(onnx_path: str = None):
     ue_msg = init_ue_client()
     _log(ue_msg)
 
-    _log("HybriToon Studio 就绪")
+    _log("AutoToon Studio 就绪")
 
     dpg.setup_dearpygui()
     dpg.show_viewport()

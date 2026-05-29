@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
-title HybriToon - 一键启动
+title AutoToon - 一键启动
 
 echo ========================================
-echo   HybriToon - AI 实时风格化工具
+echo   AutoToon - AI 实时风格化工具
 echo ========================================
 echo.
 
@@ -30,13 +30,13 @@ if exist "%~dp0training\mooatoon_model.onnx" (
     set "MODEL_PATH=%~dp0training\mooatoon_model.onnx"
 )
 
-:: 启动 HybriToon Studio
-echo [2/3] 启动 HybriToon Studio...
+:: 启动 AutoToon Studio
+echo [2/3] 启动 AutoToon Studio...
 if defined MODEL_PATH (
-    start "HybriToon Studio" python main.py --model "%MODEL_PATH%"
+    start "AutoToon Studio" python main.py --model "%MODEL_PATH%"
 ) else (
     echo [提示] 未找到 ONNX 模型，将以无模型模式启动
-    start "HybriToon Studio" python main.py
+    start "AutoToon Studio" python main.py
 )
 
 :: 提示 UE5
@@ -48,6 +48,6 @@ echo.
 echo   插件会自动在 127.0.0.1:8080 启动 HTTP 服务
 echo.
 echo ========================================
-echo   启动完成！请切换到 HybriToon Studio 窗口
+echo   启动完成！请切换到 AutoToon Studio 窗口
 echo ========================================
 pause

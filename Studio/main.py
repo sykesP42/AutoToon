@@ -1,5 +1,5 @@
 """
-main.py — HybriToon Studio 入口
+main.py — AutoToon Studio 入口
 启动 Dear PyGui 界面，加载 ONNX 模型。
 """
 import os
@@ -8,7 +8,7 @@ import argparse
 
 
 def main():
-    parser = argparse.ArgumentParser(description="HybriToon Studio — AI 风格化实时预览工具")
+    parser = argparse.ArgumentParser(description="AutoToon Studio — AI 风格化实时预览工具")
     parser.add_argument(
         "--model", "-m",
         type=str,

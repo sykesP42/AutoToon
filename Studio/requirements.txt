@@ -1,4 +1,4 @@
-# HybriToon Studio — 独立程序依赖
+# AutoToon Studio — 独立程序依赖
 # 最小依赖集，仅包含运行时必需的包
 
 # UI 框架

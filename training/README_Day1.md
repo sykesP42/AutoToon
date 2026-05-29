@@ -1,5 +1,5 @@
 
-# HybriToon - Day1 完成报告
+# AutoToon - Day1 完成报告
 
 ## 日期
 2026-04-06
@@ -42,7 +42,7 @@
 ## 文件结构
 
 ```
-HybriToon/
+AutoToon/
 ├── material_params.py       # 完整的材质参数定义（含8个dataclass）
 ├── requirements.txt         # Python依赖配置
 └── README_Day1.md          # 本文件

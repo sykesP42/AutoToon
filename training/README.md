@@ -1,4 +1,4 @@
-# HybriToon Dataset — MooaToon 材质参数预测
+# AutoToon Dataset — MooaToon 材质参数预测
 
 ## 项目概述
 

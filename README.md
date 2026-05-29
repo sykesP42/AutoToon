@@ -1,11 +1,11 @@
-# HybriToon
+# AutoToon
 
 AI 辅助的 UE5 实时风格化工具 — 上传参考图，自动提取风格参数，一键应用到 UE5 场景。
 
 ## 项目结构
 
 ```
-HybriToon/
+AutoToon/
 ├── training/               # 模型训练管线
 │   ├── train.py            # ResNet18 训练 + ONNX 导出
 │   ├── infer_test.py       # 本地推理验证
@@ -18,7 +18,7 @@ HybriToon/
 │       ├── ue_apply_labels.py
 │       └── ue_nne_infer.py
 │
-├── Studio/                 # 独立程序 (HybriToonStudio)
+├── Studio/                 # 独立程序 (AutoToonStudio)
 │   ├── main.py             # 入口
 │   ├── engine.py           # ONNX 推理引擎
 │   ├── ui.py               # Dear PyGui 界面
@@ -36,7 +36,7 @@ HybriToon/
 ├── presets/                # 风格预设 (.style 文件)
 ├── docs/                   # 参考文档和截图
 │
-├── start_hybritoon.bat     # 一键启动脚本
+├── start_autotoon.bat     # 一键启动脚本
 ├── PRODUCT_SPEC.md         # 产品规格说明书
 └── README.md
 ```
@@ -69,7 +69,7 @@ python main.py             # 自动加载模型
 
 ### 4. 一键启动
 
-双击 `start_hybritoon.bat`，自动启动 Studio 并提示打开 UE5。
+双击 `start_autotoon.bat`，自动启动 Studio 并提示打开 UE5。
 
 ## 技术栈
 
