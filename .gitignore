@@ -18,6 +18,11 @@ __pycache__/
 
 # Studio 运行时
 Studio/__pycache__/
+Studio/_debug_*.png
+Studio/_check_*.png
+Studio/_gl_*.png
+Studio/_tmp.png
+Studio/.autotoon_lang.json
 
 # 风格预设（用户生成）
 presets/*.style
