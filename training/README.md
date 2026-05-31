@@ -1,6 +1,15 @@
-# AutoToon Dataset — MooaToon 材质参数预测
+# AutoToon Dataset — MooaToon Material Parameter Prediction
 
-## 项目概述
+[中文](#autotoon-数据集--mooatoon-材质参数预测) | [English](#autotoon-dataset--mooatoon-material-parameter-prediction-en)
+
+训练一个神经网络模型，输入日式风格插画图片，输出 UE5 MooaToon 材质参数。
+
+---
+
+<a name="autotoon-数据集--mooatoon-材质参数预测"></a>
+## AutoToon 数据集 — MooaToon 材质参数预测
+
+### 项目概述
 
 训练一个神经网络模型，输入日式风格插画图片，输出 UE5 MooaToon 材质参数：
 
@@ -20,7 +29,7 @@
 
 ---
 
-## 目录结构
+### 目录结构
 
 ```
 D:/unreal/testcv/
@@ -48,7 +57,7 @@ D:/unreal/MooaToon-Engine-5.5_MooaToonProject/.../Plugins/MooaToonInference/
 ├── MooaToonInference.uplugin
 └── Source/MooaToonInference/
     ├── Public/
-    │   ├── MooaToonInferenceLibrary.h   # 蓝图函数库声明（UMooaToonInferenceLibrary）
+    │   ├── MooaToonInferenceLibrary.h   # 蓝图函数库声明
     │   └── MooaToonDebugWidget.h        # UMG 调试面板 C++ 基类
     └── Private/
         ├── MooaToonInferenceLibrary.cpp
@@ -57,7 +66,7 @@ D:/unreal/MooaToon-Engine-5.5_MooaToonProject/.../Plugins/MooaToonInference/
 
 ---
 
-## 标签文件格式
+### 标签文件格式
 
 `labels.csv` 每行对应一张图片和一组 MooaToon 材质参数：
 
@@ -81,9 +90,9 @@ ref_02.jpg,0.4,0.5,0.6,0.3,0.4,1.2
 
 ---
 
-## 各脚本说明
+### 各脚本说明
 
-### `dataset_verify.py` — 数据集验证
+#### `dataset_verify.py` — 数据集验证
 
 **用法**：
 ```bash
@@ -107,7 +116,7 @@ python dataset_verify.py
 
 ---
 
-### `train.py` — 模型训练 + ONNX 导出
+#### `train.py` — 模型训练 + ONNX 导出
 
 **模型结构**：
 ```
@@ -146,7 +155,7 @@ ONNX exported: mooatoon_model.onnx
 
 ---
 
-### `infer_test.py` — 本地推理验证
+#### `infer_test.py` — 本地推理验证
 
 **用法**：
 ```bash
@@ -177,7 +186,7 @@ python infer_test.py G1T8dBxbQAIa7hM.jpg
 
 ---
 
-### `ue_record_params.py` — [UE内运行] 调参记录
+#### `ue_record_params.py` — [UE内运行] 调参记录
 
 **作用**：在 UE5 里通过 `WBP_MooaToonDebug` 调好6个参数后，运行此脚本自动记录到 `labels.csv`。
 
@@ -208,7 +217,7 @@ Edit → Plugins → 搜索 "Python Editor Script Plugin" → 勾选 → 重启 
 
 ---
 
-### `ue_apply_labels.py` — [UE内运行] CSV 写入材质
+#### `ue_apply_labels.py` — [UE内运行] CSV 写入材质
 
 **作用**：把 `labels.csv` 里的参数值写入 UE5 材质实例，用于验证标注是否正确。
 
@@ -226,9 +235,9 @@ UE5: Tools → Execute Python Script → 选择 ue_apply_labels.py
 
 ---
 
-## UE5 MooaToonInference 插件
+### UE5 MooaToonInference 插件
 
-### 核心 C++ 类
+#### 核心 C++ 类
 
 **`UMooaToonInferenceLibrary`**（蓝图函数库）
 
@@ -270,7 +279,7 @@ static void SetMooaToonParams(
 
 ---
 
-## 完整数据流
+### 完整数据流
 
 ```
 【标注阶段】
@@ -302,7 +311,7 @@ mooatoon_model.uasset（导入到 Content Browser）
 
 ---
 
-## 环境依赖
+### 环境依赖
 
 ```bash
 pip install torch torchvision pillow pandas onnx onnxruntime
@@ -320,7 +329,7 @@ Python 版本：3.11（Windows）
 
 ---
 
-## UE5 环境
+### UE5 环境
 
 | 项目 | 路径 |
 |------|------|
@@ -333,7 +342,7 @@ Python 版本：3.11（Windows）
 
 ---
 
-## 已确认的 MooaToon 材质参数
+### 已确认的 MooaToon 材质参数
 
 | UE 参数名 | 类型 | 命名空间 | 所在材质 |
 |-----------|------|---------|---------|
@@ -341,3 +350,342 @@ Python 版本：3.11（Windows）
 | `Specular` | Scalar | LayerParameter | 主体材质 |
 | `Rim Light Width` | Scalar | LayerParameter | 主体材质 |
 | `Width Scale` | Scalar | GlobalParameter | 描边材质（MooaOutlineMaterial） |
+
+---
+
+<a name="autotoon-dataset--mooatoon-material-parameter-prediction-en"></a>
+## AutoToon Dataset — MooaToon Material Parameter Prediction (English)
+
+Train a neural network that takes anime-style illustration images as input and outputs UE5 MooaToon material parameters.
+
+### Overview
+
+```
+Input:  Anime-style illustration (224×224 RGB)
+Output: 6 MooaToon material parameters
+  [0] shadow_r        — Shadow Color R, layer parameter
+  [1] shadow_g        — Shadow Color G, layer parameter
+  [2] shadow_b        — Shadow Color B, layer parameter
+  [3] specular        — Specular intensity, layer parameter
+  [4] rim_light_width — Rim light width, layer parameter
+  [5] width_scale     — Outline width, global parameter (normalized during training, denormalized in UE)
+```
+
+The trained model is exported to ONNX and loaded in UE5's NNE (Neural Network Engine). The `MooaToonInference` plugin (C++) writes inference results to materials, achieving "one reference image → auto-inferred material parameters."
+
+---
+
+### Directory Structure
+
+```
+D:/unreal/testcv/
+│
+├── images/                   # Reference images (anime-style, PNG/JPG)
+│
+├── labels.csv                # Dataset label file (6 parameter columns)
+│
+├── dataset_verify.py         # Dataset validation script
+├── train.py                  # Model training + ONNX export (6 outputs)
+├── infer_test.py             # Local inference validation script
+│
+├── ue_record_params.py       # [Run in UE] Record 6 params to CSV after tuning
+├── ue_apply_labels.py        # [Run in UE] Apply CSV params to material instances
+├── ue_nne_infer.py           # [Run in UE] NNE inference script
+│
+├── mooatoon_model.pth        # PyTorch model weights (training artifact)
+└── mooatoon_model.onnx       # ONNX model (for UE5 NNE)
+```
+
+UE5 Plugin location:
+
+```
+D:/unreal/MooaToon-Engine-5.5_MooaToonProject/.../Plugins/MooaToonInference/
+├── MooaToonInference.uplugin
+└── Source/MooaToonInference/
+    ├── Public/
+    │   ├── MooaToonInferenceLibrary.h   # Blueprint function library
+    │   └── MooaToonDebugWidget.h        # UMG debug panel C++ base
+    └── Private/
+        ├── MooaToonInferenceLibrary.cpp
+        └── MooaToonDebugWidget.cpp
+```
+
+---
+
+### Label File Format
+
+Each row in `labels.csv` corresponds to one image and one set of MooaToon material parameters:
+
+```csv
+image_filename,shadow_r,shadow_g,shadow_b,specular,rim_light_width,width_scale
+ref_01.jpg,0.2,0.1,0.3,0.8,0.5,1.5
+ref_02.jpg,0.4,0.5,0.6,0.3,0.4,1.2
+```
+
+| Column | UE Material Parameter | Write Target | Range |
+|--------|----------------------|-------------|-------|
+| `shadow_r` | Shadow Color (R) | Body material layer param | [0, 1] |
+| `shadow_g` | Shadow Color (G) | Body material layer param | [0, 1] |
+| `shadow_b` | Shadow Color (B) | Body material layer param | [0, 1] |
+| `specular` | Specular | Body material layer param | [0, 1] |
+| `rim_light_width` | Rim Light Width | Body material layer param | [0, 1] |
+| `width_scale` | Width Scale | Outline material global param | [0.5, 3.0] |
+
+> `width_scale` is **normalized to [0,1]** during training (Sigmoid output). The UE plugin auto-denormalizes after inference:
+> `width_scale_real = output * 2.5 + 0.5`
+
+---
+
+### Script Descriptions
+
+#### `dataset_verify.py` — Dataset Validation
+
+**Usage**:
+```bash
+cd D:/unreal/testcv
+python dataset_verify.py
+```
+
+**Checks**: verifies each CSV filename has a corresponding image, images can be opened, and the 6 parameter value ranges are reasonable.
+
+**Expected output**:
+```
+[CSV] 38 records, columns: ['image_filename', 'shadow_r', 'shadow_g', 'shadow_b', 'specular', 'rim_light_width', 'width_scale']
+[OK]  38 images loaded successfully
+[Range check]
+  [shadow_r]        ✓  min=0.060  max=0.500
+  [specular]        ✓  min=0.100  max=0.960
+  [rim_light_width] ✓  min=0.250  max=0.700
+  [width_scale]     ✓  min=0.700  max=1.900
+>>> Dataset validation passed, ready to train <<<
+```
+
+---
+
+#### `train.py` — Model Training + ONNX Export
+
+**Model architecture**:
+```
+ResNet18 backbone
+    ↓
+FC layers (512 → 128 → 6)
+    ↓
+Sigmoid activation (all 6 outputs clamped to [0,1])
+```
+
+**Output order (fixed, do not change)**:
+```python
+LABEL_COLS = ["shadow_r", "shadow_g", "shadow_b", "specular", "rim_light_width", "width_scale"]
+```
+
+**Usage**:
+```bash
+cd D:/unreal/testcv
+python train.py
+```
+
+**Expected output**:
+```
+Device: cpu
+Output params: ['shadow_r', 'shadow_g', 'shadow_b', 'specular', 'rim_light_width', 'width_scale']
+Dataset: 38 images, 10 batches
+
+Epoch [01/20]  Loss: 0.071234
+...
+Epoch [20/20]  Loss: 0.021456
+
+Model saved: mooatoon_model.pth
+ONNX exported: mooatoon_model.onnx
+Output order: ['shadow_r', 'shadow_g', 'shadow_b', 'specular', 'rim_light_width', 'width_scale']
+```
+
+---
+
+#### `infer_test.py` — Local Inference Validation
+
+**Usage**:
+```bash
+# Default: use first image
+python infer_test.py
+
+# Specify image
+python infer_test.py G1T8dBxbQAIa7hM.jpg
+```
+
+**Expected output**:
+```
+Image: G1T8dBxbQAIa7hM.jpg
+─────────────────────────────────────────────
+  shadow_r                  = 0.2362
+  shadow_g                  = 0.1080
+  shadow_b                  = 0.1682
+  specular                  = 0.6962
+  rim_light_width           = 0.4823
+  width_scale               = 0.2117
+
+  [UE write params]
+  Shadow Color    = (0.236, 0.108, 0.168)
+  Specular        = 0.696          [layer param]
+  Rim Light Width = 0.482          [layer param]
+  Width Scale     = 1.029          [outline material global param, denormalized]
+```
+
+---
+
+#### `ue_record_params.py` — [Run in UE] Parameter Recording
+
+**Purpose**: after tuning the 6 parameters in UE5 via `WBP_MooaToonDebug`, run this script to auto-record them to `labels.csv`.
+
+**Per-image labeling workflow**:
+
+```
+1. Open reference image (secondary monitor)
+2. PIE run UE5, drag 6 sliders on WBP_MooaToonDebug panel:
+   - Slider_R / G / B  → Shadow Color
+   - Slider_Specular   → Specular
+   - Slider_RimLightWidth → Rim Light Width
+   - Slider_WidthScale → Width Scale (outline material)
+3. Exit PIE when satisfied
+4. Edit top of script:
+   IMAGE_FILENAME = "current_ref_image_filename.jpg"
+5. UE5 menu: Tools → Execute Python Script → select this file
+6. See "[MooaToon] recorded" in Output Log = success
+```
+
+> **Enable Python plugin in UE5**:
+> `Edit → Plugins → search "Python Editor Script Plugin" → enable → restart UE`
+
+---
+
+#### `ue_apply_labels.py` — [Run in UE] CSV to Material
+
+**Purpose**: write `labels.csv` parameter values to UE5 material instances for verification.
+
+**Two modes** (change `MODE` variable at bottom of file):
+
+| MODE | Behavior |
+|------|----------|
+| `"read"` | Read current 6 material params, print to Output Log (default) |
+| `"apply"` | Write last row's 6 params from CSV to material and save |
+
+**Usage**:
+```
+UE5: Tools → Execute Python Script → select ue_apply_labels.py
+```
+
+---
+
+### UE5 MooaToonInference Plugin
+
+#### Core C++ Classes
+
+**`UMooaToonInferenceLibrary`** (Blueprint function library)
+
+| Function | Category | Description |
+|----------|----------|-------------|
+| `SetMooaToonParams` | MooaToon | Manually set 6 params, write to material |
+| `RunMooaToonInference` | MooaToon\|Inference | NNE inference, returns FMooaToonParams (6 fields) |
+| `LoadImageToPixels` | MooaToon\|Inference | Read image → 224×224 → ImageNet normalize → CHW float |
+| `InferAndApply` | MooaToon | Full pipeline: read+infer+write to material |
+
+**`FMooaToonParams` struct fields**:
+
+```cpp
+float ShadowR       // [0, 1]  layer param
+float ShadowG       // [0, 1]  layer param
+float ShadowB       // [0, 1]  layer param
+float Specular      // [0, 1]  layer param
+float RimLightWidth // [0, 1]  layer param
+float WidthScale    // [0.5, 3.0]  outline material global param (denormalized)
+```
+
+**`SetMooaToonParams` signature**:
+
+```cpp
+static void SetMooaToonParams(
+    AActor* TargetActor,
+    FLinearColor ShadowColor,
+    float Specular      = 0.5f,   // layer param
+    float RimLightWidth = 0.5f,   // layer param
+    float WidthScale    = 1.0f,   // outline material global param
+    int32 ElementIndex  = -1      // -1 = write to all material slots
+);
+```
+
+**`UMooaToonDebugWidget`** (UMG debug panel C++ base)
+
+Create `WBP_MooaToonDebug` in UE5 Widget Blueprint with this class as parent. The panel includes 6 parameter sliders — drag to write to material in real-time, and export CSV as training labels.
+
+---
+
+### Full Data Flow
+
+```
+[Labeling Phase]
+
+Reference images (images/)
+    ↓ Tune 6 sliders on WBP_MooaToonDebug panel
+    ↓ Click "Export CSV" button
+labels.csv  ← 6-parameter columns
+
+
+[Training Phase]
+
+labels.csv + images/
+    ↓ python train.py
+mooatoon_model.onnx (6 outputs)
+    ↓ python infer_test.py verify outputs
+
+
+[Inference Phase - UE5]
+
+mooatoon_model.uasset (import to Content Browser)
+    ↓ Click "ONNX Inference" on WBP_MooaToonDebug panel
+    ↓ C++ UMooaToonInferenceLibrary::InferAndApply
+        → Shadow Color / Specular / Rim Light Width → body material layer params
+        → Width Scale (denormalized) → outline material (MooaOutlineMaterial) global param
+    ↓
+Character material takes effect in real-time
+```
+
+---
+
+### Dependencies
+
+```bash
+pip install torch torchvision pillow pandas onnx onnxruntime
+```
+
+| Package | Purpose |
+|---------|---------|
+| torch / torchvision | Training, ONNX export |
+| Pillow | Image loading |
+| pandas | CSV read/write |
+| onnx | ONNX format validation |
+| onnxruntime | Local inference validation |
+
+Python version: 3.11 (Windows)
+
+---
+
+### UE5 Environment
+
+| Item | Path |
+|------|------|
+| MooaToon Engine | `E:/MooaToon-Engine-5.5/MooaToon-Engine-5.5/` |
+| MooaToon Project | `D:/unreal/MooaToon-Engine-5.5_MooaToonProject/` |
+| ONNX Asset Location | `Content/NNE/mooatoon_model.uasset` |
+| Plugin Location | `Plugins/MooaToonInference/` |
+| Body Material | `MI_UnityChan_Body_Blue` (Shadow Color / Specular / Rim Light Width) |
+| Outline Material | `MI_UnityChan_Outline_Test` (Width Scale) |
+
+---
+
+### Confirmed MooaToon Material Parameters
+
+| UE Param Name | Type | Namespace | Target Material |
+|--------------|------|-----------|-----------------|
+| `Shadow Color` | Vector (RGB) | LayerParameter | Body material |
+| `Specular` | Scalar | LayerParameter | Body material |
+| `Rim Light Width` | Scalar | LayerParameter | Body material |
+| `Width Scale` | Scalar | GlobalParameter | Outline material (MooaOutlineMaterial) |
