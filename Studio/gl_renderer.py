@@ -628,23 +628,36 @@ class GLRenderer:
     def _create_context(self) -> moderngl.Context:
         """创建 OpenGL 上下文"""
         try:
-            return moderngl.create_standalone_context()
-        except Exception:
+            ctx = moderngl.create_standalone_context()
+            logger.info("Created standalone GL context")
+            return ctx
+        except Exception as e:
+            logger.warning(f"Standalone context failed: {e}")
             # 回退到 GLFW 创建隐藏窗口
-            logger.debug("Standalone context failed, trying GLFW...")
             try:
                 import glfw
                 glfw.init()
                 glfw.window_hint(glfw.VISIBLE, glfw.FALSE)
-                window = glfw.create_window(1, 1, "", None, None)
-                ctx = moderngl.create_standalone_context()
-                glfw.destroy_window(window)
-                glfw.terminate()
+                glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
+                glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
+                glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+                window = glfw.create_window(1, 1, "hidden", None, None)
+                glfw.make_context_current(window)
+                ctx = moderngl.create_context()
+                logger.info("Created GL context via GLFW")
+                # 不销毁 window，保持上下文活跃
+                self._glfw_window = window
                 return ctx
             except ImportError:
+                logger.error("GLFW not available")
                 raise RuntimeError(
                     "Failed to create OpenGL context. "
-                    "Please ensure moderngl is installed correctly."
+                    "Please install glfw: pip install glfw"
+                )
+            except Exception as e2:
+                logger.error(f"GLFW context also failed: {e2}")
+                raise RuntimeError(
+                    f"Failed to create OpenGL context: {e2}"
                 )
 
     def _create_meshes(self) -> None:
@@ -841,6 +854,16 @@ class GLRenderer:
         if self._program is not None:
             self._program.release()
             self._program = None
+
+        # 释放 GLFW 资源
+        if hasattr(self, '_glfw_window') and self._glfw_window is not None:
+            try:
+                import glfw
+                glfw.destroy_window(self._glfw_window)
+                glfw.terminate()
+            except Exception:
+                pass
+            self._glfw_window = None
 
         # 释放上下文
         if self._ctx is not None:
