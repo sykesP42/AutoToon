@@ -1350,11 +1350,15 @@ def build_ui():
 
             # ====== 右栏：操作 + 预设 + 日志 ======
             with dpg.child_window(width=-1, height=-1):
-                # 语言切换按钮
-                lang_btn = dpg.add_button(label=t("btn_lang"), tag="btn_lang",
-                                          callback=on_lang_toggle, width=50)
-                with dpg.tooltip(parent=lang_btn):
-                    dpg.add_text("切换语言: 中文 ↔ English\nSwitch language", color=(200, 200, 200))
+                # 顶部按钮栏：语言切换 + 关于
+                with dpg.group(horizontal=True):
+                    lang_btn = dpg.add_button(label=t("btn_lang"), tag="btn_lang",
+                                              callback=on_lang_toggle, width=50)
+                    about_btn = dpg.add_button(label="?", callback=show_about_dialog, width=30)
+                    with dpg.tooltip(parent=lang_btn):
+                        dpg.add_text("切换语言: 中文 ↔ English\nSwitch language", color=(200, 200, 200))
+                    with dpg.tooltip(parent=about_btn):
+                        dpg.add_text("关于 AutoToon Studio\n快捷键列表", color=(200, 200, 200))
 
                 dpg.add_spacer(height=5)
 
@@ -1424,6 +1428,52 @@ def build_ui():
                 with dpg.tooltip(parent=import_btn):
                     import_tip = get_lang() == "zh" and "从JSON文件导入参数\n恢复之前保存的设置" or "Import params from JSON file\nRestore previously saved settings"
                     dpg.add_text(import_tip, wrap=280, color=(200, 200, 200))
+
+                # ─── 批量处理 ────────────────────────────────────────────────────────
+                dpg.add_spacer(height=10)
+                dpg.add_separator()
+                batch_header = dpg.add_text("Batch Process", color=(180,200,255))
+                with dpg.tooltip(parent=batch_header):
+                    batch_tip = get_lang() == "zh" and "批量导入多张参考图\n自动提取参数并导出到CSV" or "Batch import multiple reference images\nAuto extract params and export to CSV"
+                    dpg.add_text(batch_tip, wrap=280, color=(200, 200, 200))
+
+                # 批量导入文件对话框
+                with dpg.file_dialog(directory_selector=False, show=False,
+                                     callback=on_batch_import_selected, tag="batch_import_dialog",
+                                     width=600, height=400, file_count=100):
+                    dpg.add_file_extension(".jpg,.jpeg,.png,.bmp", color=(100, 200, 255))
+
+                with dpg.group(horizontal=True):
+                    batch_btn = dpg.add_button(label="Import Images",
+                                              callback=lambda: dpg.show_item("batch_import_dialog"),
+                                              width=120)
+                    batch_json_btn = dpg.add_button(label="Export JSON",
+                                                   callback=on_batch_export_json,
+                                                   width=100)
+
+                # 进度显示
+                with dpg.group(horizontal=True):
+                    dpg.add_progress_bar(tag="batch_progress_bar", default_value=0.0, width=200)
+                dpg.add_text("Ready", tag="batch_progress_text", color=(150, 150, 150))
+
+                # ─── 参数随机生成器 ────────────────────────────────────────────────
+                dpg.add_spacer(height=10)
+                dpg.add_separator()
+                random_header = dpg.add_text("Random Generator", color=(180,200,255))
+                with dpg.tooltip(parent=random_header):
+                    random_tip = get_lang() == "zh" and "随机生成参数用于探索\n或批量生成训练数据" or "Random params for exploration\nOr batch generate training data"
+                    dpg.add_text(random_tip, wrap=280, color=(200, 200, 200))
+
+                with dpg.group(horizontal=True):
+                    dpg.add_button(label="Randomize", callback=on_randomize_params, width=80)
+                    dpg.add_text("Count:", color=(150, 150, 150))
+                    dpg.add_input_int(tag="training_count_input", default_value=10,
+                                     min_value=1, max_value=100, width=60)
+                    dpg.add_button(label="Generate Training", callback=on_generate_training_data, width=130)
+
+                with dpg.group(horizontal=True):
+                    dpg.add_progress_bar(tag="training_progress_bar", default_value=0.0, width=200)
+                dpg.add_text("Ready", tag="training_progress_text", color=(150, 150, 150))
 
                 dpg.add_spacer(height=10)
                 dpg.add_separator()
@@ -1504,6 +1554,41 @@ def _on_fit_to_window():
     if preview_viewer:
         preview_viewer.reset_view()
     _log("Fit to window (F)")
+
+
+# ─── 关于对话框 ────────────────────────────────────────────────────────────────
+def show_about_dialog():
+    """显示关于对话框"""
+    if dpg.does_item_exist("about_window"):
+        dpg.configure_item("about_window", show=True)
+        return
+
+    with dpg.window(label=t("about"), tag="about_window", width=400, height=300, modal=True):
+        dpg.add_text(t("about_title"), color=(100, 150, 255))
+        dpg.add_separator()
+        dpg.add_spacer(height=10)
+
+        dpg.add_text(f"{t('about_version')}: 1.0.0")
+        dpg.add_spacer(height=5)
+
+        dpg.add_text(f"{t('about_author')}: AutoToon Team")
+        dpg.add_spacer(height=10)
+
+        dpg.add_text(t("about_desc"), wrap=380)
+        dpg.add_spacer(height=15)
+
+        dpg.add_text(t("about_shortcuts"), color=(180, 200, 255))
+        shortcuts = """
+Ctrl+Z  - Undo
+Ctrl+Y  - Redo
+Space   - Reset View
+R       - Reset Params
+F       - Fit Window
+"""
+        dpg.add_text(shortcuts, color=(150, 150, 150))
+
+        dpg.add_spacer(height=20)
+        dpg.add_button(label="Close", callback=lambda: dpg.configure_item("about_window", show=False), width=-1)
 
 
 # ─── 参数导出/导入 ────────────────────────────────────────────────────────────
@@ -1629,6 +1714,238 @@ def on_export_csv():
 
     _log(f"CSV exported: {filename}")
     return filepath
+
+
+# ─── 批量处理 ────────────────────────────────────────────────────────────────
+_batch_results: list = []
+_batch_progress = 0
+_batch_total = 0
+_batch_running = False
+
+
+def on_batch_import_selected(sender, app_data):
+    """批量导入图片选择"""
+    # app_data 是文件路径列表
+    if not app_data:
+        return
+
+    global _batch_results, _batch_progress, _batch_total, _batch_running
+
+    file_paths = app_data if isinstance(app_data, list) else [app_data]
+    _batch_total = len(file_paths)
+    _batch_progress = 0
+    _batch_results = []
+
+    if _batch_total == 0:
+        _log("No images selected", error=True)
+        return
+
+    if state.engine is None:
+        _log("Model not loaded, cannot batch process", error=True)
+        return
+
+    _log(f"Batch processing {_batch_total} images...")
+    _batch_running = True
+
+    # 处理每张图片
+    for i, file_path in enumerate(file_paths):
+        try:
+            _batch_progress = i + 1
+            dpg.set_value("batch_progress_text", f"Processing {i+1}/{_batch_total}...")
+
+            # 加载图片
+            img = load_image_bgr(file_path)
+            if img is None:
+                continue
+
+            # 推理
+            result = state.engine.infer_array(img)
+
+            # 记录结果
+            _batch_results.append({
+                "image_path": file_path,
+                "image_name": os.path.basename(file_path),
+                "params": result["params"],
+                "named": result["named"],
+            })
+
+            # 更新进度
+            dpg.set_value("batch_progress_bar", float(i + 1) / _batch_total)
+
+        except Exception as e:
+            _log(f"Failed: {os.path.basename(file_path)} - {e}", error=True)
+
+    _batch_running = False
+    dpg.set_value("batch_progress_text", f"Done: {_batch_progress}/{_batch_total}")
+    _log(f"Batch complete: {_batch_progress} images processed")
+
+    # 自动导出到CSV
+    if _batch_results:
+        _export_batch_csv()
+
+
+def _export_batch_csv():
+    """导出批量处理结果到CSV"""
+    import os
+    import csv
+    from datetime import datetime
+
+    if not _batch_results:
+        return
+
+    export_dir = os.path.join(os.path.dirname(__file__), "exports")
+    os.makedirs(export_dir, exist_ok=True)
+    filename = f"batch_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    filepath = os.path.join(export_dir, filename)
+
+    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(["ImageName", "ShadowR", "ShadowG", "ShadowB", "Specular", "RimLightWidth", "WidthScale"])
+        for r in _batch_results:
+            params = r["params"]
+            writer.writerow([
+                r["image_name"],
+                f"{params[0]:.6f}",
+                f"{params[1]:.6f}",
+                f"{params[2]:.6f}",
+                f"{params[3]:.6f}",
+                f"{params[4]:.6f}",
+                f"{params[5]:.6f}",
+            ])
+
+    _log(f"Batch results exported: {filename} ({len(_batch_results)} entries)")
+
+
+def on_batch_export_json():
+    """导出批量结果为JSON"""
+    import os
+    from datetime import datetime
+
+    if not _batch_results:
+        _log("No batch results to export", error=True)
+        return
+
+    export_dir = os.path.join(os.path.dirname(__file__), "exports")
+    os.makedirs(export_dir, exist_ok=True)
+    filename = f"batch_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    filepath = os.path.join(export_dir, filename)
+
+    export_data = {
+        "timestamp": datetime.now().isoformat(),
+        "total_images": len(_batch_results),
+        "results": _batch_results,
+    }
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(export_data, f, indent=2, ensure_ascii=False)
+
+    _log(f"Batch JSON exported: {filename}")
+
+
+# ─── 参数随机生成器 ────────────────────────────────────────────────────────────
+import random
+
+
+def on_randomize_params():
+    """随机生成参数"""
+    # 使用参数定义的范围
+    params = {
+        "shadow_r": random.uniform(0.0, 1.0),
+        "shadow_g": random.uniform(0.0, 1.0),
+        "shadow_b": random.uniform(0.0, 1.0),
+        "specular": random.uniform(0.0, 1.0),
+        "rim_light": random.uniform(0.0, 1.0),
+        "outline_width": random.uniform(0.5, 3.0),
+    }
+
+    # 应用参数
+    state.set_params_from_dict(params)
+    params_list = [params["shadow_r"], params["shadow_g"], params["shadow_b"],
+                   params["specular"], params["rim_light"], params["outline_width"]]
+
+    for i, val in enumerate(params_list):
+        if dpg.does_item_exist(f"slider_{i}"):
+            dpg.set_value(f"slider_{i}", val)
+        if dpg.does_item_exist(f"val_{i}"):
+            dpg.set_value(f"val_{i}", f"{val:.3f}")
+
+    state._last_render_key = ()
+    state._preview_dirty = True
+    state._last_change_time = 0
+
+    _log("Random params generated")
+
+
+def on_generate_training_data():
+    """批量生成训练数据（随机参数 + 渲染预览）"""
+    import os
+    import csv
+    from datetime import datetime
+
+    count = dpg.get_value("training_count_input") if dpg.does_item_exist("training_count_input") else 10
+    count = max(1, min(100, int(count)))
+
+    _log(f"Generating {count} training samples...")
+
+    export_dir = os.path.join(os.path.dirname(__file__), "exports", "training_data")
+    os.makedirs(export_dir, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_path = os.path.join(export_dir, f"training_labels_{timestamp}.csv")
+
+    samples = []
+
+    for i in range(count):
+        # 更新进度
+        if dpg.does_item_exist("training_progress_bar"):
+            dpg.set_value("training_progress_bar", (i + 1) / count)
+        if dpg.does_item_exist("training_progress_text"):
+            dpg.set_value("training_progress_text", f"Generating {i+1}/{count}...")
+
+        # 随机参数
+        params = {
+            "shadow_r": random.uniform(0.0, 1.0),
+            "shadow_g": random.uniform(0.0, 1.0),
+            "shadow_b": random.uniform(0.0, 1.0),
+            "specular": random.uniform(0.0, 1.0),
+            "rim_light": random.uniform(0.0, 1.0),
+            "outline_width": random.uniform(0.5, 3.0),
+        }
+
+        # 应用参数
+        state.set_params_from_dict(params)
+
+        # 渲染预览
+        preview = _render_preview([params["shadow_r"], params["shadow_g"], params["shadow_b"],
+                                   params["specular"], params["rim_light"], params["outline_width"]])
+
+        if preview is not None:
+            # 保存预览图
+            img_filename = f"sample_{i+1:04d}.png"
+            img_path = os.path.join(export_dir, img_filename)
+            cv2.imwrite(img_path, preview)
+
+            samples.append({
+                "image_path": img_path,
+                "image_name": img_filename,
+                **params
+            })
+
+    # 写入CSV
+    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=["image_path", "image_name", "shadow_r", "shadow_g", "shadow_b",
+                                                "specular", "rim_light", "outline_width"])
+        writer.writeheader()
+        writer.writerows(samples)
+
+    # 恢复原始参数
+    defaults = get_defaults()
+    state.set_params_from_dict(defaults)
+
+    if dpg.does_item_exist("training_progress_text"):
+        dpg.set_value("training_progress_text", f"Done: {len(samples)} samples")
+
+    _log(f"Training data generated: {len(samples)} samples in {export_dir}")
 
 
 def run(onnx_path: str = None):

@@ -17,6 +17,12 @@ TRANSLATIONS = {
         "ref_image": "参考图",
         "btn_upload": "上传图片",
         "file_filter": "图片{.png,.jpg,.jpeg,.bmp}",
+        "btn_reset": "重置",
+        "btn_brush": "涂鸦",
+        "brush_focus": "重点",
+        "brush_ignore": "忽略",
+        "brush_clear": "清除",
+        "brush_size": "画笔大小",
 
         # 中栏
         "param_adjust": "参数调节",
@@ -27,6 +33,26 @@ TRANSLATIONS = {
         "label_rim_light": "边缘光",
         "label_outline_width": "描边宽度",
         "live_preview": "实时预览",
+        "shape_select": "形状选择",
+        "shape_sphere": "球体",
+        "shape_cube": "立方体",
+        "shape_cylinder": "圆柱体",
+        "shape_torus": "圆环体",
+
+        # 灯光
+        "lighting": "灯光",
+        "light_preset": "灯光预设",
+        "light_default": "默认",
+        "light_daylight": "日光",
+        "light_studio": "室内",
+        "light_night": "夜景",
+        "light_anime": "动漫风",
+        "light_ambient": "环境光",
+        "light_diffuse": "漫反射",
+        "light_specular_power": "高光锐度",
+        "light_specular_intensity": "高光强度",
+        "light_rim_intensity": "边缘光强度",
+        "light_rim_power": "边缘光范围",
 
         # 右栏
         "actions": "操作",
@@ -41,6 +67,49 @@ TRANSLATIONS = {
         "btn_save": "保存",
         "log_title": "日志",
         "btn_lang": "EN",
+
+        # 导出/导入
+        "export_json": "导出 JSON",
+        "export_csv": "导出 CSV",
+        "import_json": "导入 JSON",
+        "export_tip": "导出当前参数到JSON文件\n包含材质和灯光参数",
+        "csv_tip": "导出为MooaToon CSV格式\n可用于训练数据",
+        "import_tip": "从JSON文件导入参数\n恢复之前保存的设置",
+
+        # 批量处理
+        "batch_process": "批量处理",
+        "batch_import": "批量导入",
+        "batch_export_json": "导出JSON",
+        "batch_tip": "批量导入多张参考图\n自动提取参数并导出到CSV",
+        "batch_progress": "处理进度",
+
+        # 随机生成
+        "random_generator": "随机生成",
+        "random_tip": "随机生成参数用于探索\n或批量生成训练数据",
+        "randomize": "随机参数",
+        "generate_training": "生成训练数据",
+        "training_count": "样本数量",
+
+        # 历史管理
+        "history": "历史",
+        "history_tip": "点击恢复历史参数设置",
+        "undo": "撤销",
+        "redo": "重做",
+
+        # 对比视图
+        "compare": "对比",
+        "compare_off": "关闭",
+        "compare_history": "历史",
+        "compare_reference": "参考图",
+        "compare_tip": "与历史快照对比\n选择下方快照进行对比",
+
+        # 关于
+        "about": "关于",
+        "about_title": "AutoToon Studio",
+        "about_version": "版本",
+        "about_author": "作者",
+        "about_shortcuts": "快捷键",
+        "about_desc": "AI 风格化实时预览工具\n基于 MooaToon 参数体系",
 
         # 提示信息
         "tip_shadow": "阴影区域颜色\n• 0 = 深色阴影\n• 1 = 亮色阴影",
@@ -73,6 +142,9 @@ TRANSLATIONS = {
         "log_infering": "正在推理...",
         "log_infer_ok": "推理完成: Shadow=({},{},{}) Spec={} Rim={} Width={}",
         "log_infer_fail": "推理失败: {}",
+        "log_params_reset": "参数已重置为默认",
+        "log_view_reset": "视图已重置",
+        "log_fit_window": "适应窗口",
     },
 
     "en": {
@@ -83,6 +155,12 @@ TRANSLATIONS = {
         "ref_image": "Reference Image",
         "btn_upload": "Upload Image",
         "file_filter": "Images{.png,.jpg,.jpeg,.bmp}",
+        "btn_reset": "Reset",
+        "btn_brush": "Brush",
+        "brush_focus": "Focus",
+        "brush_ignore": "Ignore",
+        "brush_clear": "Clear",
+        "brush_size": "Brush Size",
 
         # Center panel
         "param_adjust": "Parameter Adjustment",
@@ -93,6 +171,26 @@ TRANSLATIONS = {
         "label_rim_light": "Rim Light",
         "label_outline_width": "Outline",
         "live_preview": "Live Preview",
+        "shape_select": "Shape Select",
+        "shape_sphere": "Sphere",
+        "shape_cube": "Cube",
+        "shape_cylinder": "Cylinder",
+        "shape_torus": "Torus",
+
+        # Lighting
+        "lighting": "Lighting",
+        "light_preset": "Light Preset",
+        "light_default": "Default",
+        "light_daylight": "Daylight",
+        "light_studio": "Studio",
+        "light_night": "Night",
+        "light_anime": "Anime",
+        "light_ambient": "Ambient",
+        "light_diffuse": "Diffuse",
+        "light_specular_power": "Specular Power",
+        "light_specular_intensity": "Specular Intensity",
+        "light_rim_intensity": "Rim Intensity",
+        "light_rim_power": "Rim Power",
 
         # Right panel
         "actions": "Actions",
@@ -108,13 +206,54 @@ TRANSLATIONS = {
         "log_title": "Log",
         "btn_lang": "中",
 
+        # Export/Import
+        "export_json": "Export JSON",
+        "export_csv": "Export CSV",
+        "import_json": "Import JSON",
+        "export_tip": "Export current params to JSON\nIncludes material and light params",
+        "csv_tip": "Export as MooaToon CSV format\nCan be used for training data",
+        "import_tip": "Import params from JSON file\nRestore previously saved settings",
+
+        # Batch Process
+        "batch_process": "Batch Process",
+        "batch_import": "Batch Import",
+        "batch_export_json": "Export JSON",
+        "batch_tip": "Batch import multiple reference images\nAuto extract params and export to CSV",
+        "batch_progress": "Progress",
+
+        # Random Generator
+        "random_generator": "Random Generator",
+        "random_tip": "Random params for exploration\nOr batch generate training data",
+        "randomize": "Randomize",
+        "generate_training": "Generate Training",
+        "training_count": "Count",
+
+        # History
+        "history": "History",
+        "history_tip": "Click to restore parameter settings",
+        "undo": "Undo",
+        "redo": "Redo",
+
+        # Compare View
+        "compare": "Compare",
+        "compare_off": "Off",
+        "compare_history": "History",
+        "compare_reference": "Reference",
+        "compare_tip": "Compare with history snapshot\nSelect snapshot below to compare",
+
+        # About
+        "about": "About",
+        "about_title": "AutoToon Studio",
+        "about_version": "Version",
+        "about_author": "Author",
+        "about_shortcuts": "Shortcuts",
+        "about_desc": "AI Style Real-time Preview Tool\nBased on MooaToon parameter system",
+
         # Tooltips
         "tip_shadow": "Shadow area color\n• 0 = Dark shadow\n• 1 = Bright shadow",
         "tip_specular": "Specular intensity\n• 0 = No specular\n• 1 = Strong specular",
         "tip_rim": "Rim light intensity\n• 0 = No rim\n• 1 = Strong rim",
         "tip_outline": "Outline thickness\n• 0.5 = Thin\n• 3.0 = Thick",
-        "log_title": "Log",
-        "btn_lang": "中",
 
         # Log - Init
         "log_model_ok": "Model loaded: {}",
@@ -141,6 +280,9 @@ TRANSLATIONS = {
         "log_infering": "Running inference...",
         "log_infer_ok": "Inference done: Shadow=({},{},{}) Spec={} Rim={} Width={}",
         "log_infer_fail": "Inference failed: {}",
+        "log_params_reset": "Params reset to defaults",
+        "log_view_reset": "View reset",
+        "log_fit_window": "Fit to window",
     },
 }
 
