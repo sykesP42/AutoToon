@@ -20,18 +20,18 @@ TRANSLATIONS = {
 
         # 中栏
         "param_adjust": "参数调节",
-        "label_shadow_r": "Shadow R",
-        "label_shadow_g": "Shadow G",
-        "label_shadow_b": "Shadow B",
+        "label_shadow_r": "阴影红",
+        "label_shadow_g": "阴影绿",
+        "label_shadow_b": "阴影蓝",
         "label_specular": "高光强度",
-        "label_rim_light": "边缘光宽度",
-        "label_width_scale": "描边宽度",
+        "label_rim_light": "边缘光",
+        "label_outline_width": "描边宽度",
         "live_preview": "实时预览",
 
         # 右栏
         "actions": "操作",
-        "btn_infer": "推理 (AI 分析)",
-        "btn_check_ue": "检查 UE5 连接",
+        "btn_infer": "AI 分析",
+        "btn_check_ue": "检查连接",
         "btn_send_ue": "发送到 UE5",
         "ue_status_ok": "已连接",
         "ue_status_fail": "未连接",
@@ -41,6 +41,12 @@ TRANSLATIONS = {
         "btn_save": "保存",
         "log_title": "日志",
         "btn_lang": "EN",
+
+        # 提示信息
+        "tip_shadow": "阴影区域颜色\n• 0 = 深色阴影\n• 1 = 亮色阴影",
+        "tip_specular": "高光强度\n• 0 = 无高光\n• 1 = 强高光",
+        "tip_rim": "边缘光强度\n• 0 = 无边缘光\n• 1 = 强边缘光",
+        "tip_outline": "描边粗细\n• 0.5 = 细线\n• 3.0 = 粗线",
 
         # 日志 - 初始化
         "log_model_ok": "模型加载成功: {}",
@@ -84,14 +90,14 @@ TRANSLATIONS = {
         "label_shadow_g": "Shadow G",
         "label_shadow_b": "Shadow B",
         "label_specular": "Specular",
-        "label_rim_light": "Rim Light Width",
-        "label_width_scale": "Width Scale",
+        "label_rim_light": "Rim Light",
+        "label_outline_width": "Outline",
         "live_preview": "Live Preview",
 
         # Right panel
         "actions": "Actions",
-        "btn_infer": "Infer (AI Analysis)",
-        "btn_check_ue": "Check UE5 Connection",
+        "btn_infer": "AI Analyze",
+        "btn_check_ue": "Check Connection",
         "btn_send_ue": "Send to UE5",
         "ue_status_ok": "Connected",
         "ue_status_fail": "Disconnected",
@@ -99,6 +105,14 @@ TRANSLATIONS = {
         "style_presets": "Style Presets",
         "hint_preset_name": "Preset Name",
         "btn_save": "Save",
+        "log_title": "Log",
+        "btn_lang": "中",
+
+        # Tooltips
+        "tip_shadow": "Shadow area color\n• 0 = Dark shadow\n• 1 = Bright shadow",
+        "tip_specular": "Specular intensity\n• 0 = No specular\n• 1 = Strong specular",
+        "tip_rim": "Rim light intensity\n• 0 = No rim\n• 1 = Strong rim",
+        "tip_outline": "Outline thickness\n• 0.5 = Thin\n• 3.0 = Thick",
         "log_title": "Log",
         "btn_lang": "中",
 

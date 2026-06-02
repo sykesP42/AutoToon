@@ -3,6 +3,10 @@ image_viewer.py — 图片查看器组件
 两种模式：
   模式 1（默认）：2D 图片缩放/平移
   模式 2（camera_mode）：3D 相机轨道旋转（仿 Blender）
+
+性能优化：
+  - 按需创建纹理（不预分配固定大小）
+  - 渲染节流防止过度重绘
 """
 import time
 import dearpygui.dearpygui as dpg
@@ -10,8 +14,8 @@ import numpy as np
 import cv2
 from gl_renderer import Camera
 
-MAX_TEX = 512
-RENDER_THROTTLE = 0.05  # 50ms 最小渲染间隔
+# 渲染节流间隔（秒）
+RENDER_THROTTLE = 0.033  # ~30fps
 
 
 class ImageViewer:
@@ -22,12 +26,13 @@ class ImageViewer:
         self.height = height
         self.camera_mode = camera_mode
         self.camera = Camera() if camera_mode else None
-        self._parent = parent  # 保存 parent 用于 resize 重建
+        self._parent = parent
 
         self.tex_tag = f"{name}_tex"
         self.tex_w = 1
         self.tex_h = 1
         self._has_image = False
+        self._tex_created = False
 
         # 2D 模式的缩放/平移
         self.zoom = 1.0
@@ -40,16 +45,15 @@ class ImageViewer:
         self._pan_start = (0, 0)
         self._camera_start = None
 
-        # 预分配纹理
-        init_data = [0.15, 0.15, 0.15, 1.0] * (MAX_TEX * MAX_TEX)
+        # 占位纹理（1x1 像素，几乎不占内存）
         with dpg.texture_registry():
-            dpg.add_dynamic_texture(MAX_TEX, MAX_TEX, init_data, tag=self.tex_tag)
+            dpg.add_dynamic_texture(1, 1, [0.15, 0.15, 0.15, 1.0], tag=self.tex_tag)
 
         with dpg.group(parent=parent, tag=f"{name}_group"):
             with dpg.drawlist(width=width, height=height, tag=f"{name}_drawlist"):
                 dpg.draw_rectangle((0, 0), (width, height), fill=(25, 25, 25), tag=f"{name}_bg")
                 dpg.draw_image(self.tex_tag, (0, 0), (width, height),
-                               uv_min=(0, 0), uv_max=(0, 0), tag=f"{name}_img")
+                               uv_min=(0, 0), uv_max=(1, 1), tag=f"{name}_img")
                 dpg.draw_text((width // 2 - 40, height // 2 - 8), "No Image",
                               color=(80, 80, 80), size=14, tag=f"{name}_placeholder")
 
@@ -62,7 +66,6 @@ class ImageViewer:
             dpg.add_mouse_double_click_handler(button=dpg.mvMouseButton_Left,
                                                 callback=self._on_double_click)
 
-        # 相机变化回调 + 节流
         self._on_camera_change = None
         self._last_render_time = 0.0
 
@@ -75,25 +78,35 @@ class ImageViewer:
                 self._on_camera_change()
 
     def set_image(self, img_bgr: np.ndarray, fit: bool = True):
+        """设置图像（按需创建合适大小的纹理）"""
         if img_bgr is None or img_bgr.size == 0:
             return
+
         h, w = img_bgr.shape[:2]
-        h, w = min(h, MAX_TEX), min(w, MAX_TEX)
+        # 限制最大尺寸（防止内存爆炸）
+        max_size = 1024
+        if max(h, w) > max_size:
+            scale = max_size / max(h, w)
+            img_bgr = cv2.resize(img_bgr, (int(w * scale), int(h * scale)),
+                                  interpolation=cv2.INTER_AREA)
+            h, w = img_bgr.shape[:2]
+
         self.tex_w, self.tex_h = w, h
         self._has_image = True
 
-        img_crop = img_bgr[:h, :w]
-        rgba = cv2.cvtColor(cv2.cvtColor(img_crop, cv2.COLOR_BGR2RGB),
+        # BGR → RGBA float32
+        rgba = cv2.cvtColor(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB),
                             cv2.COLOR_RGB2RGBA).astype(np.float32) / 255.0
 
-        # 预分配 + 就地写入（避免每次创建新数组）
-        if not hasattr(self, '_tex_buf') or self._tex_buf.shape[:2] != (MAX_TEX, MAX_TEX):
-            self._tex_buf = np.full((MAX_TEX, MAX_TEX, 4), [0.15, 0.15, 0.15, 1.0], dtype=np.float32)
+        # 按需重建纹理（尺寸变化时）
+        if not self._tex_created or not dpg.does_item_exist(self.tex_tag):
+            if dpg.does_item_exist(self.tex_tag):
+                dpg.delete_item(self.tex_tag)
+            with dpg.texture_registry():
+                dpg.add_dynamic_texture(w, h, rgba.ravel().tolist(), tag=self.tex_tag)
+            self._tex_created = True
         else:
-            self._tex_buf[:, :, :] = 0.15
-            self._tex_buf[:, :, 3] = 1.0
-        self._tex_buf[:h, :w, :] = rgba
-        dpg.set_value(self.tex_tag, self._tex_buf.ravel(order="C").tolist())
+            dpg.set_value(self.tex_tag, rgba.ravel().tolist())
 
         if dpg.does_item_exist(f"{self.name}_placeholder"):
             dpg.configure_item(f"{self.name}_placeholder", show=False)
@@ -111,22 +124,21 @@ class ImageViewer:
             self._update_draw()
 
     def resize(self, new_w: int, new_h: int):
-        """重建 drawlist 到新尺寸（DearPyGui 不支持动态 resize drawlist）"""
+        """重建 drawlist 到新尺寸"""
         self.width = new_w
         self.height = new_h
-        # 删除旧的 group（包含 drawlist + 所有子元素）
         old_group = f"{self.name}_group"
         old_handlers = f"{self.name}_handlers"
         if dpg.does_item_exist(old_group):
             dpg.delete_item(old_group)
         if dpg.does_item_exist(old_handlers):
             dpg.delete_item(old_handlers)
-        # 重建 drawlist + handlers（使用保存的 parent）
+
         with dpg.group(parent=self._parent, tag=f"{self.name}_group"):
             with dpg.drawlist(width=new_w, height=new_h, tag=f"{self.name}_drawlist"):
                 dpg.draw_rectangle((0, 0), (new_w, new_h), fill=(25, 25, 25), tag=f"{self.name}_bg")
                 dpg.draw_image(self.tex_tag, (0, 0), (new_w, new_h),
-                               uv_min=(0, 0), uv_max=(0, 0), tag=f"{self.name}_img")
+                               uv_min=(0, 0), uv_max=(1, 1), tag=f"{self.name}_img")
                 if self._has_image:
                     self._update_draw()
                 else:
@@ -159,10 +171,9 @@ class ImageViewer:
         x0, y0 = self.pan_x, self.pan_y
         x1 = x0 + self.tex_w * self.zoom
         y1 = y0 + self.tex_h * self.zoom
-        uv_max = (self.tex_w / MAX_TEX, self.tex_h / MAX_TEX)
         dpg.configure_item(f"{self.name}_img",
                            pmin=(x0, y0), pmax=(x1, y1),
-                           uv_min=(0, 0), uv_max=uv_max)
+                           uv_min=(0, 0), uv_max=(1, 1))
 
     # ─── 鼠标事件 ────────────────────────────────────────────────────────────
     def _on_mouse_wheel(self, sender, app_data):
@@ -188,7 +199,6 @@ class ImageViewer:
         if not self._is_mouse_over():
             return
         if self.camera_mode and self.camera:
-            # 左键拖拽 = 平移相机
             self._start_drag(0)
             cur = dpg.get_mouse_pos(local=False)
             dx = cur[0] - self._drag_start[0]
@@ -218,7 +228,7 @@ class ImageViewer:
             self._do_pan()
 
     def _on_right_drag(self, sender, app_data):
-        pass  # 保留给未来右键菜单
+        pass
 
     def _start_drag(self, button):
         if not self._dragging:
