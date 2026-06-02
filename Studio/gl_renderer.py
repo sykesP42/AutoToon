@@ -743,46 +743,55 @@ class GLRenderer:
         Returns:
             BGR numpy 数组，形状为 (H, W, 3)
         """
-        if params is None:
-            params = RenderParams()
+        try:
+            if params is None:
+                params = RenderParams()
 
-        # 参数验证
-        params.validate()
-        light.validate()
+            # 参数验证
+            params.validate()
+            light.validate()
 
-        # 确定渲染尺寸
-        rw = width if width > 0 else self._width
-        rh = height if height > 0 else self._height
+            # 确定渲染尺寸
+            rw = width if width > 0 else self._width
+            rh = height if height > 0 else self._height
 
-        # 按需重建帧缓冲
-        if rw != self._width or rh != self._height:
-            self._create_framebuffer(rw, rh)
+            # 按需重建帧缓冲
+            if rw != self._width or rh != self._height:
+                self._create_framebuffer(rw, rh)
 
-        # 获取网格
-        if shape not in self._meshes:
-            logger.warning(f"Unknown shape '{shape}', falling back to 'sphere'")
-            shape = "sphere"
+            # 获取网格
+            if shape not in self._meshes:
+                logger.warning(f"Unknown shape '{shape}', falling back to 'sphere'")
+                shape = "sphere"
 
-        vbuf, ibuf, index_count = self._meshes[shape]
+            vbuf, ibuf, index_count = self._meshes[shape]
 
-        # 创建 VAO
-        vao = self._ctx.vertex_array(
-            self._program,
-            [(vbuf, '3f 3f', 'in_pos', 'in_norm')],
-            ibuf
-        )
+            # 创建 VAO
+            vao = self._ctx.vertex_array(
+                self._program,
+                [(vbuf, '3f 3f', 'in_pos', 'in_norm')],
+                ibuf
+            )
 
-        # 设置 uniform
-        self._set_uniforms(camera, light, params)
+            # 设置 uniform
+            self._set_uniforms(camera, light, params)
 
-        # 渲染
-        self._fbo.use()
-        self._fbo.clear(28/255, 28/255, 30/255, 1.0)
-        vao.render(moderngl.TRIANGLES)
-        vao.release()
+            # 渲染
+            self._fbo.use()
+            self._fbo.clear(28/255, 28/255, 30/255, 1.0)
+            vao.render(moderngl.TRIANGLES)
+            vao.release()
 
-        # 读取像素
-        return self._read_pixels(rw, rh)
+            # 读取像素
+            return self._read_pixels(rw, rh)
+        except Exception as e:
+            logger.error(f"Render error: {e}")
+            import traceback
+            traceback.print_exc()
+            # 返回黑色图像
+            h = height if height > 0 else self._height
+            w = width if width > 0 else self._width
+            return np.zeros((h, w, 3), dtype=np.uint8)
 
     def _set_uniforms(
         self,

@@ -4,6 +4,9 @@ image_viewer.py — 图片查看器组件
   模式 1（默认）：2D 图片缩放/平移
   模式 2（camera_mode）：3D 相机轨道旋转（仿 Blender）
 
+额外功能：
+  - 涂鸦遮罩：在图片上绘制重点/忽略区域
+
 性能优化：
   - 按需创建纹理（不预分配固定大小）
   - 渲染节流防止过度重绘
@@ -20,13 +23,14 @@ RENDER_THROTTLE = 0.033  # ~30fps
 
 class ImageViewer:
     def __init__(self, name: str, width: int = 380, height: int = 380,
-                 parent: int = 0, camera_mode: bool = False):
+                 parent: int = 0, camera_mode: bool = False, enable_brush: bool = False):
         self.name = name
         self.width = width
         self.height = height
         self.camera_mode = camera_mode
         self.camera = Camera() if camera_mode else None
         self._parent = parent
+        self.enable_brush = enable_brush
 
         self.tex_tag = f"{name}_tex"
         self.tex_w = 1
@@ -44,6 +48,12 @@ class ImageViewer:
         self._drag_start = (0, 0)
         self._pan_start = (0, 0)
         self._camera_start = None
+
+        # 涂鸦相关
+        self._brush_mode = 0  # 0=禁用, 1=绿色(重点), 2=红色(忽略)
+        self._brush_size = 20
+        self._mask: Optional[np.ndarray] = None  # 涂鸦遮罩
+        self._original_image: Optional[np.ndarray] = None  # 原始图像
 
         # 占位纹理（1x1 像素，几乎不占内存）
         with dpg.texture_registry():
@@ -94,19 +104,25 @@ class ImageViewer:
         self.tex_w, self.tex_h = w, h
         self._has_image = True
 
+        # 保存原始图像（用于涂鸦）
+        self._original_image = img_bgr.copy()
+
+        # 初始化涂鸦遮罩
+        if self.enable_brush:
+            self._mask = np.zeros((h, w), dtype=np.uint8)
+
         # BGR → RGBA float32
         rgba = cv2.cvtColor(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB),
                             cv2.COLOR_RGB2RGBA).astype(np.float32) / 255.0
 
-        # 按需重建纹理（尺寸变化时）
-        if not self._tex_created or not dpg.does_item_exist(self.tex_tag):
-            if dpg.does_item_exist(self.tex_tag):
-                dpg.delete_item(self.tex_tag)
+        # 直接设置纹理值（假设纹理已存在）
+        if dpg.does_item_exist(self.tex_tag):
+            dpg.set_value(self.tex_tag, rgba.ravel().tolist())
+        else:
+            # 纹理不存在，创建新的
             with dpg.texture_registry():
                 dpg.add_dynamic_texture(w, h, rgba.ravel().tolist(), tag=self.tex_tag)
             self._tex_created = True
-        else:
-            dpg.set_value(self.tex_tag, rgba.ravel().tolist())
 
         if dpg.does_item_exist(f"{self.name}_placeholder"):
             dpg.configure_item(f"{self.name}_placeholder", show=False)
@@ -208,7 +224,16 @@ class ImageViewer:
             if self._on_camera_change:
                 self._fire_camera_change()
         else:
-            self._do_pan()
+            # 涂鸦模式
+            if self._brush_mode > 0 and self._mask is not None and self.enable_brush:
+                cur = dpg.get_mouse_pos(local=False)
+                # 计算在图像上的坐标
+                img_x = int((cur[0] - self.pan_x) / self.zoom)
+                img_y = int((cur[1] - self.pan_y) / self.zoom)
+                if 0 <= img_x < self.tex_w and 0 <= img_y < self.tex_h:
+                    self._draw_brush(img_x, img_y)
+            else:
+                self._do_pan()
 
     def _on_middle_drag(self, sender, app_data):
         """中键拖拽 = 轨道旋转（Orbit）"""
@@ -265,3 +290,62 @@ class ImageViewer:
         rect = dpg.get_item_rect_min(f"{self.name}_drawlist")
         return (rect[0] <= pos[0] <= rect[0] + self.width and
                 rect[1] <= pos[1] <= rect[1] + self.height)
+
+    # ─── 涂鸦功能 ────────────────────────────────────────────────────────────
+    def set_brush_mode(self, mode: int):
+        """设置涂鸦模式: 0=禁用, 1=绿色(重点), 2=红色(忽略)"""
+        self._brush_mode = mode
+
+    def set_brush_size(self, size: int):
+        """设置画笔大小"""
+        self._brush_size = max(5, min(100, size))
+
+    def clear_mask(self):
+        """清除涂鸦遮罩"""
+        self._mask = None
+        if self._original_image is not None:
+            self.set_image(self._original_image, fit=False)
+
+    def get_mask(self) -> Optional[np.ndarray]:
+        """获取涂鸦遮罩（与原图同尺寸）"""
+        return self._mask
+
+    def _draw_brush(self, x: int, y: int):
+        """在指定位置绘制画笔"""
+        if self._mask is None or self._brush_mode == 0:
+            return
+
+        # 在遮罩上绘制
+        cv2.circle(self._mask, (x, y), self._brush_size, self._brush_mode, -1)
+
+        # 更新显示
+        self._update_display_with_mask()
+
+    def _update_display_with_mask(self):
+        """更新显示图像（叠加涂鸦）"""
+        if self._original_image is None or self._mask is None:
+            return
+
+        # 复制原图
+        display = self._original_image.copy()
+
+        # 缩放遮罩到显示尺寸
+        if self._mask.shape[:2] != display.shape[:2]:
+            mask_resized = cv2.resize(self._mask, (display.shape[1], display.shape[0]),
+                                      interpolation=cv2.INTER_NEAREST)
+        else:
+            mask_resized = self._mask
+
+        # 绿色 = 重点区域 (值=1)
+        green = (mask_resized == 1)
+        display[green] = (display[green] * 0.6 + np.array([100, 255, 0]) * 0.4).astype(np.uint8)
+
+        # 红色 = 忽略区域 (值=2)
+        red = (mask_resized == 2)
+        display[red] = (display[red] * 0.6 + np.array([0, 50, 255]) * 0.4).astype(np.uint8)
+
+        # 更新纹理
+        rgba = cv2.cvtColor(cv2.cvtColor(display, cv2.COLOR_BGR2RGB),
+                            cv2.COLOR_RGB2RGBA).astype(np.float32) / 255.0
+        if dpg.does_item_exist(self.tex_tag):
+            dpg.set_value(self.tex_tag, rgba.ravel().tolist())

@@ -34,74 +34,79 @@ class ParamDefinition:
 # =============================================================================
 
 PARAM_DEFINITIONS = {
-    # 阴影色 RGB
+    # 阴影色 RGB (对应 MooaToon 的 Shadow Color 参数)
+    # CSV数据范围: 0.0 ~ 1.0 (各通道独立)
+    # 注意: MooaToon中 Shadow Color 是一个向量参数，包含 RGB 三个分量
     "shadow_r": ParamDefinition(
         name="shadow_r",
         label_zh="阴影红",
         label_en="Shadow R",
-        ui_min=0.0, ui_max=1.0, ui_default=0.3, ui_step=0.01,
-        render_min=0.15, render_max=0.75,  # 映射到更明显的范围
-        tooltip_zh="阴影区域的红色分量\n• 0 = 深黑阴影\n• 0.5 = 中性灰\n• 1 = 亮红阴影\n\nUE5 对应: BaseColor Shadow Mix R",
-        tooltip_en="Red component of shadow color\n• 0 = Deep black shadow\n• 0.5 = Neutral gray\n• 1 = Bright red shadow\n\nUE5: BaseColor Shadow Mix R",
-        ue_param="ShadowColorR",
+        ui_min=0.0, ui_max=1.0, ui_default=0.5, ui_step=0.01,
+        render_min=0.0, render_max=1.0,  # 直接使用原始范围
+        tooltip_zh="阴影区域的红色分量\n• 0 = 深黑阴影\n• 0.5 = 中性灰\n• 1 = 亮红阴影\n\nUE5 对应: Shadow Color R (主体材质参数)",
+        tooltip_en="Red component of shadow color\n• 0 = Deep black shadow\n• 0.5 = Neutral gray\n• 1 = Bright red shadow\n\nUE5: Shadow Color R (body material param)",
+        ue_param="ShadowColor",  # MooaToon 使用向量参数 "Shadow Color"
     ),
     "shadow_g": ParamDefinition(
         name="shadow_g",
         label_zh="阴影绿",
         label_en="Shadow G",
-        ui_min=0.0, ui_max=1.0, ui_default=0.3, ui_step=0.01,
-        render_min=0.15, render_max=0.75,
-        tooltip_zh="阴影区域的绿色分量\n• 0 = 深黑阴影\n• 0.5 = 中性灰\n• 1 = 亮绿阴影\n\nUE5 对应: BaseColor Shadow Mix G",
-        tooltip_en="Green component of shadow color\n• 0 = Deep black shadow\n• 0.5 = Neutral gray\n• 1 = Bright green shadow\n\nUE5: BaseColor Shadow Mix G",
-        ue_param="ShadowColorG",
+        ui_min=0.0, ui_max=1.0, ui_default=0.5, ui_step=0.01,
+        render_min=0.0, render_max=1.0,
+        tooltip_zh="阴影区域的绿色分量\n• 0 = 深黑阴影\n• 0.5 = 中性灰\n• 1 = 亮绿阴影\n\nUE5 对应: Shadow Color G (主体材质参数)",
+        tooltip_en="Green component of shadow color\n• 0 = Deep black shadow\n• 0.5 = Neutral gray\n• 1 = Bright green shadow\n\nUE5: Shadow Color G (body material param)",
+        ue_param="ShadowColor",
     ),
     "shadow_b": ParamDefinition(
         name="shadow_b",
         label_zh="阴影蓝",
         label_en="Shadow B",
-        ui_min=0.0, ui_max=1.0, ui_default=0.3, ui_step=0.01,
-        render_min=0.15, render_max=0.75,
-        tooltip_zh="阴影区域的蓝色分量\n• 0 = 深黑阴影\n• 0.5 = 中性灰\n• 1 = 亮蓝阴影\n\nUE5 对应: BaseColor Shadow Mix B",
-        tooltip_en="Blue component of shadow color\n• 0 = Deep black shadow\n• 0.5 = Neutral gray\n• 1 = Bright blue shadow\n\nUE5: BaseColor Shadow Mix B",
-        ue_param="ShadowColorB",
+        ui_min=0.0, ui_max=1.0, ui_default=0.5, ui_step=0.01,
+        render_min=0.0, render_max=1.0,
+        tooltip_zh="阴影区域的蓝色分量\n• 0 = 深黑阴影\n• 0.5 = 中性灰\n• 1 = 亮蓝阴影\n\nUE5 对应: Shadow Color B (主体材质参数)",
+        tooltip_en="Blue component of shadow color\n• 0 = Deep black shadow\n• 0.5 = Neutral gray\n• 1 = Bright blue shadow\n\nUE5: Shadow Color B (body material param)",
+        ue_param="ShadowColor",
     ),
 
-    # 高光强度
+    # 高光强度 (对应 MooaToon 的 Specular 参数)
+    # CSV数据范围: 0.0 ~ 1.0
     "specular": ParamDefinition(
         name="specular",
         label_zh="高光强度",
         label_en="Specular",
         ui_min=0.0, ui_max=1.0, ui_default=0.5, ui_step=0.01,
         render_min=0.0, render_max=1.0,
-        tooltip_zh="高光强度控制\n• 0 = 无高光 (哑光)\n• 0.5 = 柔和高光\n• 1 = 强烈高光\n\nUE5 对应: Specular Intensity",
-        tooltip_en="Specular intensity control\n• 0 = No specular (matte)\n• 0.5 = Soft highlight\n• 1 = Strong highlight\n\nUE5: Specular Intensity",
-        ue_param="SpecularIntensity",
+        tooltip_zh="高光强度控制\n• 0 = 无高光 (哑光)\n• 0.5 = 柔和高光\n• 1 = 强烈高光\n\nUE5 对应: Specular (主体材质参数)",
+        tooltip_en="Specular intensity control\n• 0 = No specular (matte)\n• 0.5 = Soft highlight\n• 1 = Strong highlight\n\nUE5: Specular (body material param)",
+        ue_param="Specular",  # MooaToon 使用的参数名
     ),
 
-    # 边缘光宽度
+    # 边缘光宽度 (对应 MooaToon 的 Rim Light Width 参数)
+    # CSV数据范围: 0.0 ~ 1.0 (如 0.021136, 0.099095, 0.5, 0.859199, 1.0)
     "rim_light": ParamDefinition(
         name="rim_light",
         label_zh="边缘光",
         label_en="Rim Light",
         ui_min=0.0, ui_max=1.0, ui_default=0.5, ui_step=0.01,
         render_min=0.0, render_max=1.0,
-        tooltip_zh="边缘光 (Rim Light) 强度\n• 0 = 无边缘光\n• 0.5 = 柔和轮廓光\n• 1 = 强烈轮廓光\n\nUE5 对应: Rim Intensity",
-        tooltip_en="Rim light intensity\n• 0 = No rim light\n• 0.5 = Soft outline glow\n• 1 = Strong outline glow\n\nUE5: Rim Intensity",
-        ue_param="RimIntensity",
+        tooltip_zh="边缘光 (Rim Light) 宽度\n• 0 = 无边缘光\n• 0.5 = 柔和轮廓光\n• 1 = 强烈轮廓光\n\nUE5 对应: Rim Light Width (主体材质参数)",
+        tooltip_en="Rim light width\n• 0 = No rim light\n• 0.5 = Soft outline glow\n• 1 = Strong outline glow\n\nUE5: Rim Light Width (body material param)",
+        ue_param="RimLightWidth",  # MooaToon 使用的参数名
     ),
 
-    # 描边宽度
+    # 描边宽度 (对应 MooaToon 的 Width Scale 参数)
+    # CSV数据范围: 0.6 ~ 3.0 (如 0.604527, 0.995421, 1.5, 2.0, 2.5, 3.0)
     "outline_width": ParamDefinition(
         name="outline_width",
         label_zh="描边宽度",
         label_en="Outline",
         ui_min=0.5, ui_max=3.0, ui_default=1.0, ui_step=0.05,
-        render_min=0.3, render_max=1.8,  # 映射到更明显的范围
-        tooltip_zh="描边粗细程度\n• 0.5 = 细线描边\n• 1.0 = 标准描边\n• 2.0 = 粗线描边\n• 3.0 = 很粗描边\n\nUE5 对应: Outline Width",
-        tooltip_en="Outline thickness\n• 0.5 = Thin outline\n• 1.0 = Standard outline\n• 2.0 = Thick outline\n• 3.0 = Very thick outline\n\nUE5: Outline Width",
-        ue_param="OutlineWidth",
-        ue_scale=2.5,
-        ue_offset=0.5,
+        render_min=0.5, render_max=3.0,  # 直接使用MooaToon原始范围
+        tooltip_zh="描边粗细程度\n• 0.5 = 细线描边\n• 1.0 = 标准描边\n• 2.0 = 粗线描边\n• 3.0 = 很粗描边\n\nUE5 对应: Width Scale (描边材质参数)",
+        tooltip_en="Outline thickness\n• 0.5 = Thin outline\n• 1.0 = Standard outline\n• 2.0 = Thick outline\n• 3.0 = Very thick outline\n\nUE5: Width Scale (outline material param)",
+        ue_param="WidthScale",
+        ue_scale=1.0,   # 直接映射，无缩放
+        ue_offset=0.0,  # 无偏移
     ),
 }
 
