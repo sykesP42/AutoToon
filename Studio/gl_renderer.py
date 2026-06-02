@@ -386,6 +386,7 @@ class RenderParams:
     spec_boost: float = 0.0
     rim_boost: float = 0.0
     shade_levels: int = 3
+    bg_color: Tuple[float, float, float] = (28/255, 28/255, 30/255)  # 背景颜色
 
     def validate(self) -> None:
         """验证参数范围"""
@@ -397,6 +398,7 @@ class RenderParams:
         self.shadow_color = tuple(max(0.0, min(1.0, c)) for c in self.shadow_color)
         self.base_color = tuple(max(0.0, min(1.0, c)) for c in self.base_color)
         self.outline_color = tuple(max(0.0, min(1.0, c)) for c in self.outline_color)
+        self.bg_color = tuple(max(0.0, min(1.0, c)) for c in self.bg_color)
 
 
 # =============================================================================
@@ -778,7 +780,9 @@ class GLRenderer:
 
             # 渲染
             self._fbo.use()
-            self._fbo.clear(28/255, 28/255, 30/255, 1.0)
+            # 使用参数中的背景色
+            bg = params.bg_color if hasattr(params, 'bg_color') else (28/255, 28/255, 30/255)
+            self._fbo.clear(bg[0], bg[1], bg[2], 1.0)
             vao.render(moderngl.TRIANGLES)
             vao.release()
 

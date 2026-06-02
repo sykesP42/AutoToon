@@ -81,6 +81,14 @@ class AppState:
         self._last_render_key: tuple = ()
         self._last_render_img: Optional[np.ndarray] = None
 
+        # 天空盒背景
+        self._skybox_bg = (28/255, 28/255, 30/255)  # 默认中性灰
+        self._skybox_name = "studio_gray"
+
+        # 自动旋转
+        self._auto_rotate = False
+        self._auto_rotate_speed = 30.0  # 度/秒
+
         # 防抖
         self._preview_dirty = True
         self._last_change_time = 0.0
@@ -286,6 +294,79 @@ def init_ue_client() -> str:
 SHAPE_NAMES = ["sphere", "cube", "cylinder", "torus"]
 SHAPE_LABELS = {"sphere": "球体", "cube": "立方体", "cylinder": "圆柱体", "torus": "圆环体"}
 SHAPE_LABELS_EN = {"sphere": "Sphere", "cube": "Cube", "cylinder": "Cylinder", "torus": "Torus"}
+
+# 天空盒预设
+SKYBOX_PRESETS = {
+    "studio_gray": {"name_zh": "中性灰", "name_en": "Studio Gray", "bg_color": (28/255, 28/255, 30/255)},
+    "warm_sunset": {"name_zh": "暖日落", "name_en": "Warm Sunset", "bg_color": (60/255, 35/255, 80/255)},
+    "cool_dawn": {"name_zh": "冷黎明", "name_en": "Cool Dawn", "bg_color": (35/255, 50/255, 80/255)},
+    "hdr_white": {"name_zh": "白色HDR", "name_en": "HDR White", "bg_color": (245/255, 245/255, 250/255)},
+    "dark_studio": {"name_zh": "暗工作室", "name_en": "Dark Studio", "bg_color": (10/255, 10/255, 12/255)},
+    "gradient_blue": {"name_zh": "蓝色渐变", "name_en": "Gradient Blue", "bg_color": (40/255, 60/255, 120/255)},
+    "gradient_orange": {"name_zh": "橙色渐变", "name_en": "Gradient Orange", "bg_color": (60/255, 80/255, 140/255)},
+}
+
+
+def _apply_skybox(skybox_name: str):
+    """应用天空盒背景"""
+    if skybox_name in SKYBOX_PRESETS:
+        preset = SKYBOX_PRESETS[skybox_name]
+        bg_color = preset["bg_color"]
+        # 更新渲染背景色
+        state._skybox_bg = bg_color
+        state._skybox_name = skybox_name
+        state._last_render_key = ()
+        state._preview_dirty = True
+        state._last_change_time = 0
+        preset_name = preset["name_zh"] if get_lang() == "zh" else preset["name_en"]
+        _log(f"Background: {preset_name}")
+
+
+def _on_skybox_selected(sender, app_data):
+    """天空盒选择回调"""
+    skybox_keys = list(SKYBOX_PRESETS.keys())
+    for key in skybox_keys:
+        preset = SKYBOX_PRESETS[key]
+        name = preset["name_zh"] if get_lang() == "zh" else preset["name_en"]
+        if name == app_data:
+            _apply_skybox(key)
+            break
+
+
+def _on_auto_rotate_toggled(sender, app_data):
+    """自动旋转开关回调"""
+    state._auto_rotate = app_data
+    if app_data:
+        _log("Auto rotate enabled")
+    else:
+        _log("Auto rotate disabled")
+
+
+def _on_rotate_speed_changed(sender, app_data):
+    """旋转速度调整回调"""
+    state._auto_rotate_speed = app_data
+
+
+def _save_screenshot():
+    """保存当前预览截图"""
+    import os
+    from datetime import datetime
+
+    preview = state._last_render_img
+    if preview is None:
+        preview = _render_preview()
+
+    if preview is not None:
+        save_dir = os.path.join(os.path.dirname(__file__), "screenshots")
+        os.makedirs(save_dir, exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        params_str = "_".join([f"{p:.2f}" for p in [state.shadow_r, state.shadow_g, state.shadow_b, state.specular, state.rim_light, state.outline_width]])
+        filename = f"screenshot_{timestamp}_{params_str}.png"
+        filepath = os.path.join(save_dir, filename)
+
+        cv2.imwrite(filepath, preview)
+        _log(f"Screenshot saved: {filename}")
 
 # 灯光预设
 LIGHT_PRESETS = {
@@ -932,6 +1013,7 @@ def _render_preview(params: list = None) -> Optional[np.ndarray]:
             spec_boost=render_spec * 1.2,  # 增强 20%
             rim_boost=render_rim * 1.3,    # 增强 30%
             shade_levels=3 if shadow_r > 0.35 else 2,
+            bg_color=state._skybox_bg,  # 使用天空盒背景色
         )
 
         # 渲染
@@ -1294,6 +1376,34 @@ def build_ui():
                             dpg.add_slider_float(default_value=val, min_value=mn, max_value=mx,
                                                  width=160, callback=on_light_changed, user_data=attr,
                                                  tag=f"light_slider_{attr}")
+
+                # ─── 天空盒背景 + 自动旋转 ────────────────────────────────────────────
+                with dpg.tree_node(label="Background & Animation", default_open=False):
+                    # 天空盒选择
+                    dpg.add_text("Background:", color=(150, 150, 150))
+                    skybox_labels = [SKYBOX_PRESETS[k]["name_zh"] if get_lang() == "zh" else SKYBOX_PRESETS[k]["name_en"] for k in SKYBOX_PRESETS.keys()]
+                    dpg.add_combo(items=skybox_labels, tag="skybox_combo",
+                                 default_value=skybox_labels[0], width=150,
+                                 callback=_on_skybox_selected)
+
+                    # 自动旋转
+                    with dpg.group(horizontal=True):
+                        dpg.add_text("Auto Rotate:", color=(150, 150, 150))
+                        dpg.add_checkbox(tag="auto_rotate_checkbox", default_value=False,
+                                        callback=_on_auto_rotate_toggled)
+                        dpg.add_slider_float(tag="rotate_speed_slider", default_value=30.0,
+                                             min_value=5.0, max_value=120.0, width=120,
+                                             callback=_on_rotate_speed_changed)
+                        dpg.add_text("°/s", color=(100, 100, 100))
+
+                    # 截图保存
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(label="Save Screenshot", callback=_save_screenshot, width=120)
+                        dpg.add_checkbox(tag="auto_save_checkbox", default_value=False,
+                                        label="Auto Save")
+                        with dpg.tooltip(parent="auto_save_checkbox"):
+                            auto_tip = get_lang() == "zh" and "参数变化时自动保存截图" or "Auto save screenshot on param change"
+                            dpg.add_text(auto_tip, color=(200, 200, 200))
 
                 preview_viewer = ImageViewer("preview_viewer", width=VIEWER_W, height=VIEWER_H,
                                              camera_mode=True)
@@ -1978,7 +2088,27 @@ def run(onnx_path: str = None):
     dpg.set_primary_window("primary_window", True)
 
     # 手动渲染循环
+    _last_rotate_time = time.time()
+
     while dpg.is_dearpygui_running():
+        # 自动旋转
+        if state._auto_rotate:
+            now = time.time()
+            delta = now - _last_rotate_time
+            _last_rotate_time = now
+
+            # 更新相机 yaw
+            rotate_delta = state._auto_rotate_speed * delta
+            if preview_viewer and preview_viewer.camera:
+                preview_viewer.camera.yaw += rotate_delta
+                preview_viewer.camera.yaw %= 360
+            if popout_viewer and popout_viewer.camera:
+                popout_viewer.camera.yaw += rotate_delta
+                popout_viewer.camera.yaw %= 360
+
+            state._last_render_key = ()
+            state._preview_dirty = True
+
         # 检测弹出窗口被 OS 关闭
         if popout_viewer and _popout_viewport_id \
            and not dpg.does_item_exist(_popout_viewport_id):
