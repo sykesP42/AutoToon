@@ -1,6 +1,6 @@
 """
 ui_skybox.py — AutoToon Studio Skybox 版本
-材质球预览 + 多种 Skybox 背景
+材质球预览 + 多种 Skybox 背景 + 多形状支持
 """
 import os
 import numpy as np
@@ -16,8 +16,12 @@ engine = None
 brush_mode = 0
 brush_size = 20
 current_skybox = 0
+current_shape = "sphere"  # 新增: 当前形状
 
+# 预计算数据缓存
 _sphere_data = None
+_cube_data = None
+_cylinder_data = None
 _skybox_cache = {}
 
 material = {
@@ -25,20 +29,24 @@ material = {
     "specular": 0.6, "rim": 0.5, "outline": 2.0, "levels": 3,
 }
 
+# 形状列表
+SHAPE_NAMES = ["sphere", "cube", "cylinder"]
+SHAPE_LABELS = {"sphere": "Sphere", "cube": "Cube", "cylinder": "Cylinder"}
+
 
 # =============================================================================
 # Skybox 预设 - 工业级渲染背景
 # =============================================================================
 
 SKYBOX_PRESETS = [
-    {"name": "Studio Gray", "desc": "中性灰 - 标准工作室环境"},
-    {"name": "Warm Sunset", "desc": "暖色日落 - 电影感"},
-    {"name": "Cool Dawn", "desc": "冷色黎明 - 清晨氛围"},
-    {"name": "HDR White", "desc": "白色HDR - 产品展示"},
-    {"name": "Dark Studio", "desc": "暗色工作室 - 突出材质"},
-    {"name": "Gradient Blue", "desc": "蓝色渐变 - 科技感"},
-    {"name": "Gradient Orange", "desc": "橙色渐变 - 温暖氛围"},
-    {"name": "Checkerboard", "desc": "棋盘格 - 透明材质测试"},
+    {"name": "Studio Gray", "desc": "Neutral gray - Standard studio"},
+    {"name": "Warm Sunset", "desc": "Warm sunset - Cinematic"},
+    {"name": "Cool Dawn", "desc": "Cool dawn - Morning vibe"},
+    {"name": "HDR White", "desc": "White HDR - Product display"},
+    {"name": "Dark Studio", "desc": "Dark studio - Highlight material"},
+    {"name": "Gradient Blue", "desc": "Blue gradient - Tech feel"},
+    {"name": "Gradient Orange", "desc": "Orange gradient - Warm vibe"},
+    {"name": "Checkerboard", "desc": "Checkerboard - Alpha test"},
 ]
 
 
@@ -141,9 +149,160 @@ def precompute_sphere(size=400):
     return _sphere_data
 
 
-def render_sphere_with_skybox():
-    """渲染带 Skybox 背景的材质球"""
-    data = precompute_sphere(VIEWER_SIZE)
+def precompute_cube(size=400):
+    """预计算立方体法线数据 - 透视投影"""
+    global _cube_data
+    if _cube_data is not None:
+        return _cube_data
+
+    cx, cy = size // 2, size // 2
+    half_size = size // 3
+
+    # 创建坐标网格
+    y_coords, x_coords = np.ogrid[:size, :size]
+
+    # 模拟透视投影的立方体 (显示前、顶、右三个面)
+    nx = np.zeros((size, size), dtype=np.float32)
+    ny = np.zeros((size, size), dtype=np.float32)
+    nz = np.zeros((size, size), dtype=np.float32)
+    mask = np.zeros((size, size), dtype=bool)
+
+    # 前面 (z 方向) - 中心区域
+    front_x0 = cx - half_size
+    front_x1 = cx + half_size
+    front_y0 = cy - half_size
+    front_y1 = cy + half_size
+
+    front_mask = (x_coords >= front_x0) & (x_coords < front_x1) & \
+                 (y_coords >= front_y0) & (y_coords < front_y1)
+    mask |= front_mask
+    nz[front_mask] = 0.9
+    nx[front_mask] = 0.1  # 微微向右倾斜
+    ny[front_mask] = 0.1  # 微微向上倾斜
+
+    # 顶面 (y 方向) - 上方区域
+    top_x0 = cx - half_size - half_size//3
+    top_x1 = cx + half_size + half_size//3
+    top_y0 = front_y0 - half_size//2
+    top_y1 = front_y0
+
+    top_mask = (x_coords >= top_x0) & (x_coords < front_x0) & \
+               (y_coords >= top_y0) & (y_coords < top_y1)
+    mask |= top_mask
+    ny[top_mask] = -0.9
+    nz[top_mask] = 0.3
+
+    # 右面 (x 方向) - 右侧区域
+    right_x0 = front_x1
+    right_x1 = front_x1 + half_size//2
+    right_y0 = cy - half_size + half_size//3
+    right_y1 = cy + half_size
+
+    right_mask = (x_coords >= right_x0) & (x_coords < right_x1) & \
+                 (y_coords >= right_y0) & (y_coords < right_y1)
+    mask |= right_mask
+    nx[right_mask] = 0.9
+    nz[right_mask] = 0.3
+
+    # 计算边缘描边
+    dist = np.zeros((size, size), dtype=np.float32)
+    for y in range(size):
+        for x in range(size):
+            if mask[y, x]:
+                # 计算到边缘的距离
+                edge_dists = []
+                if y >= front_y0 and y < front_y1 and x >= front_x0 and x < front_x1:
+                    edge_dists = [x - front_x0, front_x1 - x - 1, y - front_y0, front_y1 - y - 1]
+                elif mask[y, x]:
+                    # 其他面的边缘
+                    edge_dists = [3]  # 默认描边宽度
+                if edge_dists:
+                    dist[y, x] = min(edge_dists)
+
+    outline = (dist > 0) & (dist <= 3)
+
+    _cube_data = {
+        'nx': nx, 'ny': ny, 'nz': nz,
+        'mask': mask, 'outline': outline, 'dist': dist
+    }
+    return _cube_data
+
+
+def precompute_cylinder(size=400):
+    """预计算圆柱体法线数据"""
+    global _cylinder_data
+    if _cylinder_data is not None:
+        return _cylinder_data
+
+    cx, cy = size // 2, size // 2
+    radius = size // 3
+    half_height = size // 3
+
+    y_coords, x_coords = np.ogrid[:size, :size]
+    dx = (x_coords - cx).astype(np.float32)
+    dy = (y_coords - cy).astype(np.float32)
+    dist_xy = np.sqrt(dx*dx + dy*dy)
+
+    nx = np.zeros((size, size), dtype=np.float32)
+    ny = np.zeros((size, size), dtype=np.float32)
+    nz = np.zeros((size, size), dtype=np.float32)
+    mask = np.zeros((size, size), dtype=bool)
+
+    # 圆柱体区域
+    in_radius = dist_xy <= radius
+    y_in_range = (dy >= -half_height) & (dy <= half_height)
+    mask = in_radius & y_in_range
+
+    # 侧面法线 - 指向外
+    side_area = mask & (dist_xy > radius * 0.1)
+    nx[side_area] = dx[side_area] / radius
+    ny[side_area] = 0
+    nz[side_area] = np.sqrt(np.maximum(0, 1 - (nx[side_area])**2))
+
+    # 归一化
+    norm = np.sqrt(nx[side_area]**2 + ny[side_area]**2 + nz[side_area]**2)
+    nx[side_area] = nx[side_area] / np.maximum(norm, 0.01)
+    nz[side_area] = nz[side_area] / np.maximum(norm, 0.01)
+
+    # 顶面法线 - 指向上
+    top_area = mask & (dy > half_height - 5)
+    ny[top_area] = -1.0
+    nz[top_area] = 0
+
+    # 底面法线 - 指向下
+    bottom_area = mask & (dy < -half_height + 5)
+    ny[bottom_area] = 1.0
+    nz[bottom_area] = 0
+
+    # 描边
+    outline = (dist_xy > radius - 3) & (dist_xy <= radius) & y_in_range
+    # 上下边缘描边
+    top_outline = in_radius & (dy > half_height - 3) & (dy <= half_height)
+    bottom_outline = in_radius & (dy >= -half_height) & (dy < -half_height + 3)
+    outline |= top_outline | bottom_outline
+
+    _cylinder_data = {
+        'nx': nx, 'ny': ny, 'nz': nz,
+        'mask': mask, 'outline': outline,
+        'dist': dist_xy
+    }
+    return _cylinder_data
+
+
+def get_shape_data(shape_name, size=400):
+    """获取指定形状的预计算数据"""
+    if shape_name == "sphere":
+        return precompute_sphere(size)
+    elif shape_name == "cube":
+        return precompute_cube(size)
+    elif shape_name == "cylinder":
+        return precompute_cylinder(size)
+    return precompute_sphere(size)
+
+
+def render_shape_with_skybox():
+    """渲染带 Skybox 背景的材质形状"""
+    data = get_shape_data(current_shape, VIEWER_SIZE)
     skybox = generate_skybox(current_skybox, VIEWER_SIZE)
 
     # 结果图像 - 先用 skybox 填充
@@ -158,7 +317,6 @@ def render_sphere_with_skybox():
     nz = data['nz']
     mask = data['mask']
     dist = data['dist']
-    radius = data['radius']
 
     # 漫反射
     NdotL = np.maximum(0, nx*light[0] + ny*light[1] + nz*light[2])
@@ -209,17 +367,19 @@ def render_sphere_with_skybox():
     result[mask] = sphere_color[mask]
 
     # 描边 - 根据 outline 参数动态计算宽度
-    outline_width = int(material["outline"] * 3)
-    outline_mask = (dist > radius - outline_width) & (dist <= radius)
-    result[outline_mask] = [0.02, 0.02, 0.05]
+    outline_width = int(material["outline"])
+    if outline_width > 0 and 'outline' in data:
+        outline_mask = data['outline']
+        result[outline_mask] = [0.02, 0.02, 0.05]
 
     # 转为 BGR uint8
     return (result * 255).astype(np.uint8)
 
 
-def update_sphere():
-    print(f"[Update] Rendering sphere with skybox={current_skybox}")
-    img = render_sphere_with_skybox()
+def update_shape():
+    """更新形状渲染"""
+    print(f"[Update] Rendering {current_shape} with skybox={current_skybox}")
+    img = render_shape_with_skybox()
     rgba = cv2.cvtColor(img, cv2.COLOR_BGR2RGBA).astype(np.float32) / 255.0
     if dpg.does_item_exist("sphere_tex"):
         dpg.set_value("sphere_tex", rgba.ravel().tolist())
@@ -297,9 +457,39 @@ def on_skybox_change(sender, app_data):
         if preset["name"] == app_data:
             current_skybox = idx
             break
-    update_sphere()
+    update_shape()
     dpg.set_value("skybox_name", SKYBOX_PRESETS[current_skybox]["desc"])
     print(f"[Skybox] {SKYBOX_PRESETS[current_skybox]['name']}")
+
+
+def on_shape_change(sender, app_data, user_data):
+    """形状切换回调"""
+    global current_shape
+    new_shape = user_data
+    if new_shape == current_shape:
+        return
+
+    current_shape = new_shape
+    print(f"[Shape] Changed to {current_shape}")
+
+    # 更新按钮颜色
+    for i, shape in enumerate(SHAPE_NAMES):
+        is_selected = shape == current_shape
+        btn_color = (70, 130, 200) if is_selected else (50, 50, 55)
+        hover_color = (100, 160, 230) if is_selected else (70, 70, 75)
+
+        # 重新绑定主题
+        theme_tag = f"shape_theme_{i}"
+        if dpg.does_item_exist(theme_tag):
+            dpg.delete_item(theme_tag)
+
+        with dpg.theme(tag=theme_tag):
+            with dpg.theme_component(dpg.mvButton):
+                dpg.add_theme_color(dpg.mvThemeCol_Button, btn_color, category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, hover_color, category=dpg.mvThemeCat_Core)
+        dpg.bind_item_theme(f"shape_btn_{i}", theme_tag)
+
+    update_shape()
 
 
 def on_infer():
@@ -326,13 +516,13 @@ def on_infer():
         material["shadow_b"] = float(preds[2])
         material["specular"] = float(preds[3])
         material["rim"] = float(preds[4])
-        material["outline"] = float(preds[5]) * 2.5 + 0.5
+        material["outline"] = float(preds[5]) * 5  # 0~5 范围
 
         for k, tag in [("shadow_r","s_r"), ("shadow_g","s_g"), ("shadow_b","s_b"),
                        ("specular","s_sp"), ("rim","s_rm"), ("outline","s_ot")]:
             dpg.set_value(tag, material[k])
 
-        update_sphere()
+        update_shape()
         dpg.set_value("status", "Done!")
         print(f"[Infer] {preds[:6]}")
     except Exception as e:
@@ -343,7 +533,7 @@ def on_infer():
 def on_param(s, a, k):
     material[k] = a
     print(f"[Param] {k} = {a}")
-    update_sphere()
+    update_shape()
 
 
 def load_model():
@@ -363,7 +553,7 @@ def make_param_callback(key):
     def callback(s, a):
         material[key] = a
         print(f"[Param] {key} = {a:.3f}")
-        update_sphere()
+        update_shape()
     return callback
 
 
@@ -426,6 +616,29 @@ def build():
                         width=150,
                         callback=on_skybox_change
                     )
+
+                # 形状选择
+                with dpg.group(horizontal=True):
+                    dpg.add_text("Shape:")
+                    for i, shape in enumerate(SHAPE_NAMES):
+                        label = SHAPE_LABELS.get(shape, shape)
+                        is_selected = shape == current_shape
+                        btn_color = (70, 130, 200) if is_selected else (50, 50, 55)
+                        dpg.add_button(
+                            label=label,
+                            tag=f"shape_btn_{i}",
+                            width=60,
+                            callback=on_shape_change,
+                            user_data=shape
+                        )
+                        # 绑定主题
+                        with dpg.theme(tag=f"shape_theme_{i}"):
+                            with dpg.theme_component(dpg.mvButton):
+                                dpg.add_theme_color(dpg.mvThemeCol_Button, btn_color, category=dpg.mvThemeCat_Core)
+                                hover = (100, 160, 230) if is_selected else (70, 70, 75)
+                                dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, hover, category=dpg.mvThemeCat_Core)
+                        dpg.bind_item_theme(f"shape_btn_{i}", f"shape_theme_{i}")
+
                 dpg.add_text(SKYBOX_PRESETS[0]["desc"], tag="skybox_name", color=(100, 100, 100))
 
                 with dpg.drawlist(width=VIEWER_SIZE, height=VIEWER_SIZE):
@@ -441,7 +654,7 @@ def build():
                     ("Shadow B", "s_b", "shadow_b", 0, 1, False),
                     ("Specular", "s_sp", "specular", 0, 1.5, False),
                     ("Rim Light", "s_rm", "rim", 0, 1.5, False),
-                    ("Outline", "s_ot", "outline", 0.5, 5, False),
+                    ("Outline", "s_ot", "outline", 0, 5, False),
                     ("Shade Lv", "s_lv", "levels", 2, 4, True),
                 ]
 
@@ -480,12 +693,13 @@ def build():
 
 def run():
     print("=" * 50)
-    print("AutoToon Studio - Skybox Preview")
+    print("AutoToon Studio - Skybox & Multi-Shape")
     print("  8 Industrial Skybox Presets")
+    print("  3 Shape Types: Sphere, Cube, Cylinder")
     print("=" * 50)
     load_model()
     build()
-    update_sphere()
+    update_shape()
     print("\n[Ready]\n")
     while dpg.is_dearpygui_running():
         dpg.render_dearpygui_frame()

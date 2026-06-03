@@ -16,6 +16,7 @@ import dearpygui.dearpygui as dpg
 import numpy as np
 import cv2
 from gl_renderer import Camera
+from typing import Optional
 
 # 渲染节流间隔（秒）
 RENDER_THROTTLE = 0.033  # ~30fps
