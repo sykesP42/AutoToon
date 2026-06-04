@@ -1,9 +1,10 @@
 """
-ui_skybox.py — AutoToon Studio Skybox Version
-Material preview + Multiple Skybox backgrounds + Multi-shape support + Camera control
+ui_skybox.py — AutoToon Studio Skybox Version 2.0
+Material preview + Multiple Skybox backgrounds + Multi-shape + Camera + Style presets + Screenshot
 """
 import os
 import time
+import json
 import numpy as np
 import cv2
 import dearpygui.dearpygui as dpg
@@ -1218,6 +1219,33 @@ def reset_material():
     update_shape()
 
 
+def save_screenshot():
+    """保存当前预览截图"""
+    import datetime
+
+    # 渲染当前画面
+    img = render_shape_with_skybox()
+
+    # 生成文件名
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"autotoon_{current_shape}_{timestamp}.png"
+
+    # 保存到 data/screenshots 目录
+    screenshot_dir = os.path.join(os.path.dirname(__file__), "..", "data", "screenshots")
+    os.makedirs(screenshot_dir, exist_ok=True)
+    filepath = os.path.join(screenshot_dir, filename)
+
+    cv2.imwrite(filepath, img)
+    print(f"[Screenshot] Saved: {filepath}")
+    return filepath
+
+
+def on_save_screenshot(sender, app_data):
+    """截图按钮回调"""
+    path = save_screenshot()
+    dpg.set_value("status", f"Saved: {os.path.basename(path)}")
+
+
 def on_key_press(sender, app_data):
     """Handle keyboard shortcuts"""
     key = app_data
@@ -1242,6 +1270,141 @@ def on_key_press(sender, app_data):
     # Toggle auto rotate: Space
     elif key == 32:  # Space
         on_auto_rotate(None, None)
+
+
+# =============================================================================
+# 风格预设管理
+# =============================================================================
+
+STYLE_DIR = os.path.join(os.path.dirname(__file__), "..", "presets")
+
+
+def get_style_presets():
+    """获取所有风格预设"""
+    os.makedirs(STYLE_DIR, exist_ok=True)
+    presets = []
+    for f in os.listdir(STYLE_DIR):
+        if f.endswith(".style"):
+            presets.append(f[:-6])  # Remove .style extension
+    return presets
+
+
+def save_style_preset(name):
+    """保存当前材质参数为预设"""
+    os.makedirs(STYLE_DIR, exist_ok=True)
+    filepath = os.path.join(STYLE_DIR, f"{name}.style")
+    data = {
+        "name": name,
+        "material": material.copy(),
+        "skybox": current_skybox,
+        "shape": current_shape,
+    }
+    with open(filepath, 'w') as f:
+        json.dump(data, f, indent=2)
+    print(f"[Style] Saved: {filepath}")
+
+
+def load_style_preset(name):
+    """加载风格预设"""
+    filepath = os.path.join(STYLE_DIR, f"{name}.style")
+    if not os.path.exists(filepath):
+        print(f"[Style] Not found: {filepath}")
+        return False
+
+    with open(filepath, 'r') as f:
+        data = json.load(f)
+
+    global material, current_skybox, current_shape
+
+    # Load material
+    for key in material:
+        if key in data.get("material", {}):
+            material[key] = data["material"][key]
+
+    # Update UI sliders
+    for key, tag in [("shadow_r","s_r"), ("shadow_g","s_g"), ("shadow_b","s_b"),
+                     ("specular","s_sp"), ("rim","s_rm"), ("outline","s_ot"),
+                     ("sss","s_sss"), ("aniso","s_aniso"), ("metallic","s_metal"),
+                     ("roughness","s_rough")]:
+        if dpg.does_item_exist(tag):
+            dpg.set_value(tag, material[key])
+    dpg.set_value("s_lv", int(material.get("levels", 3)))
+
+    # Load skybox
+    current_skybox = data.get("skybox", 0)
+    dpg.set_value("skybox_combo", SKYBOX_PRESETS[current_skybox]["name"])
+
+    # Load shape
+    current_shape = data.get("shape", "sphere")
+    update_shape_button_themes()
+    update_shape()
+
+    print(f"[Style] Loaded: {name}")
+    return True
+
+
+def on_save_preset(sender, app_data):
+    """保存预设回调"""
+    name = dpg.get_value("preset_name")
+    if not name:
+        dpg.set_value("status", "Enter preset name")
+        return
+    save_style_preset(name)
+    update_preset_list()
+    dpg.set_value("status", f"Saved: {name}")
+
+
+def show_about_dialog():
+    """显示关于对话框"""
+    with dpg.window(label="About AutoToon", modal=True, tag="about_window", width=400, height=350):
+        dpg.add_text("AutoToon Studio - Skybox Version 2.0", color=(100, 180, 255))
+        dpg.add_separator()
+        dpg.add_spacer(height=5)
+
+        dpg.add_text("AI-assisted UE5 real-time stylization tool")
+        dpg.add_spacer(height=10)
+
+        dpg.add_text("Features:", color=(180, 180, 100))
+        dpg.add_text("• 6 Shape Types: Sphere, Cube, Cylinder, Torus, Cone, Icosa")
+        dpg.add_text("• 9 Skybox Presets + Custom Image Support")
+        dpg.add_text("• Advanced: SSS, Anisotropic, Metallic, Roughness")
+        dpg.add_text("• Style Presets: Save/Load material configurations")
+        dpg.add_text("• Screenshot Export")
+        dpg.add_spacer(height=10)
+
+        dpg.add_text("Keyboard Shortcuts:", color=(180, 180, 100))
+        dpg.add_text("1-6: Switch shapes | R: Reset camera")
+        dpg.add_text("M: Reset material | Space: Toggle auto-rotate")
+        dpg.add_spacer(height=10)
+
+        dpg.add_text("Tech Stack:", color=(180, 180, 100))
+        dpg.add_text("Python + Dear PyGui + NumPy + OpenCV + ONNX")
+        dpg.add_spacer(height=15)
+
+        dpg.add_button(label="Close", callback=lambda: dpg.delete_item("about_window"), width=100)
+
+
+def on_about(sender, app_data):
+    """关于按钮回调"""
+    if dpg.does_item_exist("about_window"):
+        dpg.delete_item("about_window")
+    show_about_dialog()
+
+
+def on_load_preset(sender, app_data):
+    """加载预设回调"""
+    name = dpg.get_value("preset_combo")
+    if not name:
+        return
+    if load_style_preset(name):
+        dpg.set_value("status", f"Loaded: {name}")
+
+
+def update_preset_list():
+    """更新预设下拉列表"""
+    presets = get_style_presets()
+    if dpg.does_item_exist("preset_combo"):
+        dpg.configure_item("preset_combo", items=presets)
 
 
 def on_rotation_speed(sender, app_data):
@@ -1325,7 +1488,7 @@ def make_param_callback(key):
 
 def build():
     dpg.create_context()
-    dpg.create_viewport(title="AutoToon Studio - Skybox", width=920, height=620)
+    dpg.create_viewport(title="AutoToon Studio - Skybox v2.0", width=950, height=720)
 
     with dpg.theme() as t:
         with dpg.theme_component(dpg.mvAll):
@@ -1369,7 +1532,11 @@ def build():
                     dpg.add_text("Brush:")
                     dpg.add_slider_int(tag="bsize", default_value=20, min_value=5, max_value=50, width=120,
                                       callback=lambda s,a: globals().__setitem__('brush_size', a))
-                dpg.add_button(label="Extract Style", callback=on_infer, width=120)
+
+                # 截图和推理按钮
+                with dpg.group(horizontal=True):
+                    dpg.add_button(label="Screenshot", callback=on_save_screenshot, width=90)
+                    dpg.add_button(label="Extract", callback=on_infer, width=70)
                 dpg.add_text("", tag="status", color=(80, 180, 80))
 
             dpg.add_spacer(width=15)
@@ -1390,9 +1557,18 @@ def build():
                     )
                     dpg.add_button(label="Load", callback=lambda: dpg.show_item("skybox_fdlg"), width=50)
 
+                # Style presets
+                with dpg.group(horizontal=True):
+                    dpg.add_text("Preset:")
+                    dpg.add_combo(items=get_style_presets(), tag="preset_combo", width=100, callback=on_load_preset)
+                    dpg.add_input_text(tag="preset_name", hint="name", width=70)
+                    dpg.add_button(label="Save", callback=on_save_preset, width=45)
+
                 # Shape selection - split into two rows for 6 shapes
                 with dpg.group():
-                    dpg.add_text("Shape:")
+                    with dpg.group(horizontal=True):
+                        dpg.add_text("Shape:")
+                        dpg.add_button(label="?", callback=on_about, width=20)
                     # Row 1: Sphere, Cube, Cylinder
                     with dpg.group(horizontal=True):
                         for i, shape in enumerate(SHAPE_NAMES[:3]):
