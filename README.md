@@ -4,6 +4,8 @@
 
 AI-assisted UE5 real-time stylization tool — upload a reference image, automatically extract style parameters, and apply to your UE5 scene in one click.
 
+**Current Version: v2.1.0**
+
 ---
 
 <a name="autotoon-1"></a>
@@ -14,11 +16,15 @@ AI 辅助的 UE5 实时风格化工具 — 上传参考图，自动提取风格�
 ### Features
 
 - **AI Style Extraction** - Upload reference image, auto-extract toon style parameters
-- **Multi-Shape Preview** - Sphere, Cube, Cylinder with real-time rendering
-- **8 Skybox Presets** - Studio Gray, Warm Sunset, Cool Dawn, HDR White, etc.
-- **Brush Tool** - Mark focus/ignore areas for better AI inference
-- **Real-time Parameter Adjustment** - Shadow RGB, Specular, Rim Light, Outline, Shade Levels
-- **UE5 Integration** - One-click apply parameters to UE5 scene
+- **Multi-Shape Preview** - Sphere, Cube, Cylinder, Torus, Cone, Icosahedron (6 shapes)
+- **9 Skybox Presets** - Studio Gray, Warm Sunset, Cool Dawn, HDR White, etc. + Custom Image Support
+- **Advanced Rendering** - SSS, Anisotropic Specular, Metallic, Roughness parameters
+- **Camera Control** - Mouse drag rotation + slider controls
+- **Style Presets** - Save/Load material configurations
+- **UE5 Integration** - HTTP communication with UE5 plugin
+- **Batch Processing** - Folder-based AI inference for multiple images
+- **Keyboard Shortcuts** - 1-6 shapes, R reset camera, M reset material, Space auto-rotate
+- **Screenshot Export** - PNG with timestamp
 
 ### Project Structure
 
@@ -40,7 +46,7 @@ AutoToon/
 │   ├── main.py             # Entry point
 │   ├── engine.py           # ONNX inference engine
 │   ├── ui.py               # Dear PyGui UI (full version)
-│   ├── ui_skybox.py        # Skybox + Multi-shape version
+│   ├── ui_skybox.py        # Skybox v2.1 + Multi-shape + UE5
 │   ├── ui_fast.py          # Fast CPU rendering version
 │   ├── ui_minimal.py       # Minimal version
 │   ├── gl_renderer.py      # ModernGL GPU renderer
@@ -118,14 +124,20 @@ Double-click `start_autotoon.bat` to launch Studio and get prompted to open UE5.
 
 AI-assisted UE5 real-time stylization tool — upload a reference image, automatically extract style parameters, and apply to your UE5 scene in one click.
 
+**Current Version: v2.1.0**
+
 ### Features
 
 - **AI Style Extraction** - Upload reference image, auto-extract toon style parameters
-- **Multi-Shape Preview** - Sphere, Cube, Cylinder with real-time rendering
-- **8 Skybox Presets** - Studio Gray, Warm Sunset, Cool Dawn, HDR White, etc.
-- **Brush Tool** - Mark focus/ignore areas for better AI inference
-- **Real-time Parameter Adjustment** - Shadow RGB, Specular, Rim Light, Outline, Shade Levels
-- **UE5 Integration** - One-click apply parameters to UE5 scene
+- **Multi-Shape Preview** - Sphere, Cube, Cylinder, Torus, Cone, Icosahedron (6 shapes)
+- **9 Skybox Presets** - Studio Gray, Warm Sunset, Cool Dawn, HDR White, etc. + Custom Image Support
+- **Advanced Rendering** - SSS, Anisotropic Specular, Metallic, Roughness parameters
+- **Camera Control** - Mouse drag rotation + slider controls
+- **Style Presets** - Save/Load material configurations
+- **UE5 Integration** - HTTP communication with UE5 plugin
+- **Batch Processing** - Folder-based AI inference for multiple images
+- **Keyboard Shortcuts** - 1-6 shapes, R reset camera, M reset material, Space auto-rotate
+- **Screenshot Export** - PNG with timestamp
 
 ### Project Structure
 
