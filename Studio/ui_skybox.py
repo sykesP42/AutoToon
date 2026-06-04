@@ -54,6 +54,10 @@ _skybox_cache = {}
 material = {
     "shadow_r": 0.35, "shadow_g": 0.35, "shadow_b": 0.4,
     "specular": 0.6, "rim": 0.5, "outline": 2.0, "levels": 3,
+    "sss": 0.3,        # Subsurface scattering intensity
+    "aniso": 0.2,      # Anisotropic specular
+    "metallic": 0.0,   # Metallic factor
+    "roughness": 0.5,  # Roughness factor
 }
 
 # 形状列表
@@ -649,126 +653,129 @@ def get_shape_data(shape_name, size=400):
 
 
 def render_shape_with_skybox():
-    """Render material shape with Skybox background and camera rotation"""
+    """Render material shape with Skybox background and camera rotation - Optimized with advanced effects"""
     data = get_shape_data(current_shape, VIEWER_SIZE)
     skybox = generate_skybox(current_skybox, VIEWER_SIZE)
 
     # Result image - fill with skybox first
     result = skybox.copy()
 
-    # Calculate rotation matrices for camera
-    pitch_rad = np.radians(camera_pitch)
-    yaw_rad = np.radians(camera_yaw)
-    roll_rad = np.radians(camera_roll)
+    # Pre-compute rotation values
+    cp, sp = np.cos(np.radians(camera_pitch)), np.sin(np.radians(camera_pitch))
+    cy, sy = np.cos(np.radians(camera_yaw)), np.sin(np.radians(camera_yaw))
+    cr, sr = np.cos(np.radians(camera_roll)), np.sin(np.radians(camera_roll))
 
-    # Rotation matrix components
-    cp, sp = np.cos(pitch_rad), np.sin(pitch_rad)
-    cy, sy = np.cos(yaw_rad), np.sin(yaw_rad)
-    cr, sr = np.cos(roll_rad), np.sin(roll_rad)
-
-    # Light direction with rotation (now uses camera yaw + rotation_angle)
-    angle_rad = np.radians(rotation_angle)
-    base_light = np.array([0.5, -0.5, 0.8])
-    # Rotate light around Y axis
-    cos_a, sin_a = np.cos(angle_rad), np.sin(angle_rad)
-    light = np.array([
-        base_light[0] * cos_a - base_light[2] * sin_a,
-        base_light[1],
-        base_light[0] * sin_a + base_light[2] * cos_a
-    ])
+    # Light direction
+    cos_a, sin_a = np.cos(np.radians(rotation_angle)), np.sin(np.radians(rotation_angle))
+    light = np.array([0.5 * cos_a - 0.8 * sin_a, -0.5, 0.5 * sin_a + 0.8 * cos_a])
     light = light / np.linalg.norm(light)
 
-    # Get base normals
-    nx_base = data['nx']
-    ny_base = data['ny']
-    nz_base = data['nz']
+    # Get normals and apply rotation (vectorized)
+    nx_b, ny_b, nz_b = data['nx'], data['ny'], data['nz']
+
+    # Combined rotation in one step
+    nx = (nx_b * cy + nz_b * sy) * cr - (ny_b * cp - (-nx_b * sy + nz_b * cy) * sp) * sr
+    ny = (nx_b * cy + nz_b * sy) * sr + (ny_b * cp - (-nx_b * sy + nz_b * cy) * sp) * cr
+    nz = ny_b * sp + (-nx_b * sy + nz_b * cy) * cp
+
     mask = data['mask']
-    dist = data['dist']
 
-    # Apply camera rotation to normals
-    # Y-axis rotation (yaw)
-    nx_rot = nx_base * cy + nz_base * sy
-    nz_rot = -nx_base * sy + nz_base * cy
-    ny_rot = ny_base.copy()
+    # Diffuse (vectorized)
+    NdotL = np.maximum(0, nx * light[0] + ny * light[1] + nz * light[2])
 
-    # X-axis rotation (pitch)
-    ny_final = ny_rot * cp - nz_rot * sp
-    nz_final = ny_rot * sp + nz_rot * cp
-    nx_final = nx_rot.copy()
+    # Subsurface scattering simulation
+    sss = material["sss"]
+    if sss > 0:
+        # Wrap lighting for SSS effect
+        wrap = 0.5
+        NdotL_sss = np.maximum(0, (NdotL + wrap) / (1 + wrap))
+        # Add reddish tint in shadow areas
+        sss_factor = (1 - NdotL) * sss * 0.4
+        NdotL = NdotL * (1 - sss * 0.3) + NdotL_sss * sss * 0.3
 
-    # Z-axis rotation (roll)
-    nx = nx_final * cr - ny_final * sr
-    ny = nx_final * sr + ny_final * cr
-    nz = nz_final.copy()
-
-    # 漫反射
-    NdotL = np.maximum(0, nx*light[0] + ny*light[1] + nz*light[2])
-
-    # 色阶化
+    # Smooth cel-shading with configurable smoothing
     levels = int(material["levels"])
+    smooth_factor = 0.15
+
     if levels == 2:
-        shade = (NdotL > 0.5).astype(np.float32)
+        shade = np.clip((NdotL - 0.5) / smooth_factor + 0.5, 0, 1)
     elif levels == 3:
-        shade = np.clip(np.floor(NdotL * 3) / 2, 0, 1)
+        shade = np.clip(np.floor(NdotL * 3 + 0.5) / 2, 0, 1)
     else:
-        shade = np.clip(np.floor(NdotL * 4) / 3, 0, 1)
+        shade = np.clip(np.floor(NdotL * 4 + 0.5) / 3, 0, 1)
 
     shade = np.clip(shade + material["shadow_r"] * 0.3, 0, 1)
 
-    # 颜色 - BGR
-    shadow = [material["shadow_b"], material["shadow_g"], material["shadow_r"]]
-    base = [0.92, 0.9, 0.9]
+    # Color computation (vectorized)
+    shadow_b = material["shadow_b"] + sss_factor * 0.1 if sss > 0 else material["shadow_b"]
+    shadow_g, shadow_r = material["shadow_g"], material["shadow_r"]
 
-    sphere_color = np.zeros((VIEWER_SIZE, VIEWER_SIZE, 3), dtype=np.float32)
-    for c in range(3):
-        sphere_color[:,:,c] = shadow[c] + (base[c] - shadow[c]) * shade
+    # Single array operation
+    shape_color = np.stack([
+        shadow_b + (0.92 - shadow_b) * shade,
+        shadow_g + (0.90 - shadow_g) * shade,
+        shadow_r + (0.90 - shadow_r) * shade
+    ], axis=-1)
 
-    # 高光
-    half = np.array([0.25, -0.25, 0.9])
-    half = half / np.linalg.norm(half)
-    NdotH = np.maximum(0, nx*half[0] + ny*half[1] + nz*half[2])
-    spec = np.clip(np.power(NdotH, 32) * material["specular"], 0, 1)
+    # Add SSS reddish tint
+    if sss > 0:
+        shape_color[..., 2] += sss_factor * 0.15  # Add red in shadow areas
 
-    sphere_color[:,:,0] += spec * 0.9
-    sphere_color[:,:,1] += spec * 0.8
-    sphere_color[:,:,2] += spec * 0.7
+    # Specular with roughness
+    roughness = material["roughness"]
+    spec_power = 32 * (1 - roughness * 0.8)
 
-    # 边缘光
-    rim = np.power(1 - nz, 3) * material["rim"]
-    sphere_color[:,:,0] += rim * 1.0
-    sphere_color[:,:,1] += rim * 0.85
-    sphere_color[:,:,2] += rim * 0.8
+    # Anisotropic specular
+    aniso = material["aniso"]
+    if aniso > 0:
+        # Tangent-based anisotropic highlight
+        tangent_x = np.where(np.abs(nz) < 0.99, -nz, 0)
+        tangent_y = np.zeros_like(tangent_x)
+        tangent_z = np.where(np.abs(nz) < 0.99, nx, 1)
 
-    # 环境反射 - 菲涅尔效应，边缘混合 skybox
-    fresnel = np.power(1 - nz, 2)
-    for c in range(3):
-        sphere_color[:,:,c] = sphere_color[:,:,c] * (1 - fresnel * 0.2) + skybox[:,:,c] * fresnel * 0.2
+        # Stretch highlight in tangent direction
+        half = np.array([0.22, -0.22, 0.95])
+        NdotH = np.maximum(0, nx * half[0] + ny * half[1] * (1 - aniso) + nz * half[2])
+    else:
+        half = np.array([0.22, -0.22, 0.95])
+        NdotH = np.maximum(0, nx * half[0] + ny * half[1] + nz * half[2])
 
-    sphere_color = np.clip(sphere_color, 0, 1)
+    spec = np.clip(np.power(NdotH, spec_power) * material["specular"], 0, 1)
 
-    # 合成
-    result[mask] = sphere_color[mask]
+    shape_color[..., 0] += spec * 0.9
+    shape_color[..., 1] += spec * 0.8
+    shape_color[..., 2] += spec * 0.7
 
-    # 描边 - 根据 outline 参数动态计算宽度
-    outline_width = int(material["outline"])
-    if outline_width > 0 and 'outline' in data:
-        outline_mask = data['outline']
-        result[outline_mask] = [0.02, 0.02, 0.05]
+    # Rim light with fresnel
+    rim = np.power(np.maximum(0, 1 - nz), 3) * material["rim"]
+    shape_color[..., 0] += rim * 1.0
+    shape_color[..., 1] += rim * 0.85
+    shape_color[..., 2] += rim * 0.8
 
-    # 转为 BGR uint8
+    # Metallic reflection
+    metallic = material["metallic"]
+    fresnel = np.power(np.maximum(0, 1 - nz), 2) * (0.25 + metallic * 0.5)
+    fresnel = np.expand_dims(fresnel, axis=-1)  # For broadcasting
+    shape_color = shape_color * (1 - fresnel) + skybox * fresnel
+
+    shape_color = np.clip(shape_color, 0, 1)
+
+    # Composite
+    result[mask] = shape_color[mask]
+
+    # Outline
+    if material["outline"] > 0 and 'outline' in data:
+        result[data['outline']] = [0.02, 0.02, 0.05]
+
     return (result * 255).astype(np.uint8)
 
 
 def update_shape():
     """更新形状渲染"""
-    print(f"[Update] Rendering {current_shape} with skybox={current_skybox}")
     img = render_shape_with_skybox()
     rgba = cv2.cvtColor(img, cv2.COLOR_BGR2RGBA).astype(np.float32) / 255.0
     if dpg.does_item_exist("sphere_tex"):
         dpg.set_value("sphere_tex", rgba.ravel().tolist())
-        print(f"[Update] Texture updated")
-    else:
-        print("[Update] ERROR: sphere_tex not found!")
 
 
 def update_multi_shape():
@@ -1184,6 +1191,59 @@ def sync_camera_sliders():
         dpg.set_value("cam_dist", camera_distance)
 
 
+def reset_camera():
+    """Reset camera to default position"""
+    global camera_pitch, camera_yaw, camera_roll, camera_distance
+    camera_pitch, camera_yaw, camera_roll, camera_distance = 0.0, 0.0, 0.0, 1.0
+    sync_camera_sliders()
+    update_shape()
+
+
+def reset_material():
+    """Reset material to default values"""
+    global material
+    material = {
+        "shadow_r": 0.35, "shadow_g": 0.35, "shadow_b": 0.4,
+        "specular": 0.6, "rim": 0.5, "outline": 2.0, "levels": 3,
+        "sss": 0.3, "aniso": 0.2, "metallic": 0.0, "roughness": 0.5,
+    }
+    # Update all UI sliders
+    for key, tag in [("shadow_r","s_r"), ("shadow_g","s_g"), ("shadow_b","s_b"),
+                     ("specular","s_sp"), ("rim","s_rm"), ("outline","s_ot"),
+                     ("sss","s_sss"), ("aniso","s_aniso"), ("metallic","s_metal"),
+                     ("roughness","s_rough")]:
+        if dpg.does_item_exist(tag):
+            dpg.set_value(tag, material[key])
+    dpg.set_value("s_lv", 3)
+    update_shape()
+
+
+def on_key_press(sender, app_data):
+    """Handle keyboard shortcuts"""
+    key = app_data
+
+    # Shape shortcuts: 1-6
+    if key in [ord(str(i)) for i in range(1, 7)]:
+        idx = key - ord('1')
+        if idx < len(SHAPE_NAMES):
+            global current_shape
+            current_shape = SHAPE_NAMES[idx]
+            update_shape_button_themes()
+            update_shape()
+
+    # Reset: R
+    elif key == ord('r') or key == ord('R'):
+        reset_camera()
+
+    # Reset material: M
+    elif key == ord('m') or key == ord('M'):
+        reset_material()
+
+    # Toggle auto rotate: Space
+    elif key == 32:  # Space
+        on_auto_rotate(None, None)
+
+
 def on_rotation_speed(sender, app_data):
     """Change rotation speed"""
     global rotation_speed
@@ -1485,8 +1545,36 @@ def build():
                                 callback=make_param_callback(key)
                             )
 
+                # Advanced material parameters
+                dpg.add_separator()
+                dpg.add_text("Advanced", color=(110, 110, 120))
+                adv_params = [
+                    ("SSS", "s_sss", "sss", 0, 1, False),
+                    ("Aniso", "s_aniso", "aniso", 0, 1, False),
+                    ("Metallic", "s_metal", "metallic", 0, 1, False),
+                    ("Roughness", "s_rough", "roughness", 0, 1, False),
+                ]
+
+                for label, tag, key, mn, mx, is_int in adv_params:
+                    with dpg.group(horizontal=True):
+                        dpg.add_text(f"{label}:")
+                        dpg.add_slider_float(
+                            tag=tag,
+                            default_value=material[key],
+                            min_value=mn,
+                            max_value=mx,
+                            width=130,
+                            callback=make_param_callback(key)
+                        )
+
         dpg.add_spacer(height=5)
-        dpg.add_text("Tips: Focus=Green, Ignore=Red | Skybox simulates lighting environment", color=(70, 70, 70))
+
+        # Reset buttons
+        with dpg.group(horizontal=True):
+            dpg.add_button(label="Reset Camera", callback=reset_camera, width=100)
+            dpg.add_button(label="Reset Material", callback=reset_material, width=100)
+
+        dpg.add_text("Shortcuts: 1-6=Shapes, R=Reset Cam, M=Reset Mat, Space=Auto", color=(70, 70, 70))
 
     with dpg.handler_registry():
         # Brush drag on reference image
@@ -1497,6 +1585,8 @@ def build():
         dpg.add_mouse_release_handler(callback=on_mouse_up)  # Release any button
         dpg.add_mouse_move_handler(callback=on_mouse_move)
         dpg.add_mouse_wheel_handler(callback=on_mouse_wheel)
+        # Keyboard shortcuts
+        dpg.add_key_press_handler(callback=on_key_press)
 
     dpg.setup_dearpygui()
     dpg.show_viewport()
@@ -1505,11 +1595,11 @@ def build():
 
 def run():
     print("=" * 50)
-    print("AutoToon Studio - Skybox & Multi-Shape")
-    print("  8 Industrial Skybox Presets")
-    print("  3 Shape Types: Sphere, Cube, Cylinder")
-    print("  Auto Rotation Animation")
-    print("  Mouse: Left-drag=Rotate, Scroll=Zoom, Right-drag=Pan")
+    print("AutoToon Studio - Skybox Version 2.0")
+    print("  9 Skybox Presets + Custom Image Support")
+    print("  6 Shape Types: Sphere, Cube, Cylinder, Torus, Cone, Icosa")
+    print("  Advanced: SSS, Anisotropic, Metallic, Roughness")
+    print("  Controls: Mouse drag, Scroll, Keyboard shortcuts")
     print("=" * 50)
     load_model()
     build()
