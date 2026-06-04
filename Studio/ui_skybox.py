@@ -80,6 +80,11 @@ SHAPE_LABELS = {
     "icosa": "Icosa"
 }
 
+# 对比视图状态
+compare_mode = False  # 是否显示对比视图
+compare_shape_a = "sphere"
+compare_shape_b = "cube"
+
 
 # =============================================================================
 # Skybox 预设 - 工业级渲染背景
@@ -781,7 +786,10 @@ def render_shape_with_skybox():
 
 def update_shape():
     """更新形状渲染"""
-    img = render_shape_with_skybox()
+    if compare_mode:
+        img = render_compare_view()
+    else:
+        img = render_shape_with_skybox()
     rgba = cv2.cvtColor(img, cv2.COLOR_BGR2RGBA).astype(np.float32) / 255.0
     if dpg.does_item_exist("sphere_tex"):
         dpg.set_value("sphere_tex", rgba.ravel().tolist())
@@ -922,6 +930,68 @@ def on_preview_mode_change(sender, app_data):
     print(f"[Preview Mode] {preview_mode}")
     # 需要重建 UI
     rebuild_preview_area()
+
+
+def toggle_compare_mode(sender, app_data):
+    """切换对比视图模式"""
+    global compare_mode
+    compare_mode = not compare_mode
+    label = "Compare: ON" if compare_mode else "Compare: OFF"
+    dpg.set_item_label("btn_compare", label)
+    dpg.set_value("status", f"Compare mode: {'ON' if compare_mode else 'OFF'}")
+    update_shape()
+
+
+def on_compare_shape_a_change(sender, app_data):
+    """对比形状A选择"""
+    global compare_shape_a
+    compare_shape_a = app_data
+    if compare_mode:
+        update_shape()
+
+
+def on_compare_shape_b_change(sender, app_data):
+    """对比形状B选择"""
+    global compare_shape_b
+    compare_shape_b = app_data
+    if compare_mode:
+        update_shape()
+
+
+def render_compare_view():
+    """渲染对比视图（两个形状并排）"""
+    half_size = VIEWER_SIZE // 2
+
+    # 渲染形状A
+    data_a = get_shape_data(compare_shape_a, half_size)
+    skybox_a = generate_skybox(current_skybox, half_size)
+
+    # 简化渲染（直接用 render_shape_with_skybox 然后缩放）
+    global current_shape
+    original_shape = current_shape
+
+    current_shape = compare_shape_a
+    img_a_full = render_shape_with_skybox()
+    img_a = cv2.resize(img_a_full, (half_size, half_size))
+
+    current_shape = compare_shape_b
+    img_b_full = render_shape_with_skybox()
+    img_b = cv2.resize(img_b_full, (half_size, half_size))
+
+    # 恢复原形状
+    current_shape = original_shape
+
+    # 拼接
+    result = np.hstack([img_a, img_b])
+
+    # 添加分隔线
+    cv2.line(result, (half_size, 0), (half_size, VIEWER_SIZE), (50, 50, 50), 2)
+
+    # 添加标签
+    cv2.putText(result, compare_shape_a, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (150, 150, 150), 2)
+    cv2.putText(result, compare_shape_b, (half_size + 10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (150, 150, 150), 2)
+
+    return result
 
 
 def rebuild_preview_area():
@@ -1210,6 +1280,42 @@ def reset_camera():
     camera_pitch, camera_yaw, camera_roll, camera_distance = 0.0, 0.0, 0.0, 1.0
     sync_camera_sliders()
     update_shape()
+
+
+def randomize_material():
+    """随机生成材质参数"""
+    import random
+
+    global material
+    material = {
+        "shadow_r": random.uniform(0.2, 0.5),
+        "shadow_g": random.uniform(0.2, 0.5),
+        "shadow_b": random.uniform(0.25, 0.55),
+        "specular": random.uniform(0.3, 1.2),
+        "rim": random.uniform(0.2, 1.0),
+        "outline": random.uniform(0.5, 4.0),
+        "levels": random.choice([2, 3, 4]),
+        "sss": random.uniform(0, 0.5),
+        "aniso": random.uniform(0, 0.5),
+        "metallic": random.uniform(0, 0.8),
+        "roughness": random.uniform(0.2, 0.8),
+    }
+
+    # Update UI sliders
+    for key, tag in [("shadow_r","s_r"), ("shadow_g","s_g"), ("shadow_b","s_b"),
+                     ("specular","s_sp"), ("rim","s_rm"), ("outline","s_ot"),
+                     ("sss","s_sss"), ("aniso","s_aniso"), ("metallic","s_metal"),
+                     ("roughness","s_rough")]:
+        if dpg.does_item_exist(tag):
+            dpg.set_value(tag, material[key])
+    dpg.set_value("s_lv", int(material["levels"]))
+    update_shape()
+
+
+def on_randomize(sender, app_data):
+    """随机风格按钮回调"""
+    randomize_material()
+    dpg.set_value("status", "Random style generated")
 
 
 def reset_material():
@@ -1702,6 +1808,17 @@ def build():
                     dpg.add_button(label="Send", callback=on_send_ue5, width=60)
                     dpg.add_text("Disconnected ✗", tag="ue5_status", color=(200, 80, 80))
 
+                # Compare View
+                dpg.add_separator()
+                dpg.add_text("Compare View", color=(140, 140, 150))
+                with dpg.group(horizontal=True):
+                    dpg.add_button(label="Compare: OFF", tag="btn_compare", callback=toggle_compare_mode, width=90)
+                    dpg.add_combo(items=SHAPE_NAMES, default_value=compare_shape_a, width=70,
+                                  callback=on_compare_shape_a_change)
+                    dpg.add_text("vs")
+                    dpg.add_combo(items=SHAPE_NAMES, default_value=compare_shape_b, width=70,
+                                  callback=on_compare_shape_b_change)
+
                 # Batch Processing
                 dpg.add_separator()
                 dpg.add_text("Batch Process", color=(140, 140, 150))
@@ -1922,10 +2039,11 @@ def build():
 
         dpg.add_spacer(height=5)
 
-        # Reset buttons
+        # Reset and Random buttons
         with dpg.group(horizontal=True):
-            dpg.add_button(label="Reset Camera", callback=reset_camera, width=100)
-            dpg.add_button(label="Reset Material", callback=reset_material, width=100)
+            dpg.add_button(label="Reset Cam", callback=reset_camera, width=75)
+            dpg.add_button(label="Reset Mat", callback=reset_material, width=75)
+            dpg.add_button(label="Random!", callback=on_randomize, width=70)
 
         dpg.add_text("Shortcuts: 1-6=Shapes, R=Reset Cam, M=Reset Mat, Space=Auto", color=(70, 70, 70))
 
