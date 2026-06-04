@@ -1,6 +1,6 @@
 """
-ui_skybox.py — AutoToon Studio Skybox Version 2.0
-Material preview + Multiple Skybox backgrounds + Multi-shape + Camera + Style presets + Screenshot
+ui_skybox.py — AutoToon Studio Skybox Version 2.1
+Material preview + Multiple Skybox + Multi-shape + Camera + Style presets + Screenshot + UE5 integration
 """
 import os
 import time
@@ -8,6 +8,14 @@ import json
 import numpy as np
 import cv2
 import dearpygui.dearpygui as dpg
+
+# UE5 客户端
+try:
+    from ue_client import UE5Client
+    ue_client = UE5Client()
+except Exception as e:
+    ue_client = None
+    print(f"[UE5] Client not available: {e}")
 
 VIEWER_SIZE = 400
 
@@ -1097,7 +1105,8 @@ def on_camera_yaw(sender, app_data):
     camera_yaw = app_data
     # Sync with rotation angle for light direction
     rotation_angle = camera_yaw
-    dpg.set_value("rot_angle", rotation_angle)
+    if dpg.does_item_exist("rot_angle"):
+        dpg.set_value("rot_angle", rotation_angle)
     update_shape()
 
 
@@ -1156,9 +1165,12 @@ def on_mouse_move(sender, app_data):
         # Sync rotation angle with yaw
         rotation_angle = camera_yaw
         # Update sliders
-        dpg.set_value("cam_pitch", camera_pitch)
-        dpg.set_value("cam_yaw", camera_yaw)
-        dpg.set_value("rot_angle", rotation_angle)
+        if dpg.does_item_exist("cam_pitch"):
+            dpg.set_value("cam_pitch", camera_pitch)
+        if dpg.does_item_exist("cam_yaw"):
+            dpg.set_value("cam_yaw", camera_yaw)
+        if dpg.does_item_exist("rot_angle"):
+            dpg.set_value("rot_angle", rotation_angle)
         update_shape()
 
     elif mouse_button == 1:  # Right button: pan
@@ -1407,6 +1419,150 @@ def update_preset_list():
         dpg.configure_item("preset_combo", items=presets)
 
 
+# =============================================================================
+# UE5 连接功能
+# =============================================================================
+
+def check_ue5_connection():
+    """检查 UE5 连接状态"""
+    if ue_client is None:
+        return {"ok": False, "error": "UE5 client not available"}
+
+    result = ue_client.health_check()
+    return result
+
+
+def send_to_ue5():
+    """发送当前材质参数到 UE5"""
+    if ue_client is None:
+        return {"ok": False, "error": "UE5 client not available"}
+
+    # 构建参数列表 (6 个主要参数)
+    params = [
+        material["shadow_r"],
+        material["shadow_g"],
+        material["shadow_b"],
+        material["specular"],
+        material["rim"],
+        material["outline"] / 5.0,  # 归一化到 0-1
+    ]
+
+    return ue_client.send_params(params)
+
+
+def on_check_ue5(sender, app_data):
+    """检查 UE5 连接按钮回调"""
+    result = check_ue5_connection()
+    if result["ok"]:
+        dpg.set_value("ue5_status", "Connected ✓")
+        dpg.configure_item("ue5_status", color=(80, 200, 80))
+    else:
+        dpg.set_value("ue5_status", "Disconnected ✗")
+        dpg.configure_item("ue5_status", color=(200, 80, 80))
+    dpg.set_value("status", result.get("error", "UE5 connected") if not result["ok"] else "UE5 connected")
+
+
+def on_send_ue5(sender, app_data):
+    """发送到 UE5 按钮回调"""
+    # 先检查连接
+    check = check_ue5_connection()
+    if not check["ok"]:
+        dpg.set_value("status", check.get("error", "UE5 not connected"))
+        dpg.set_value("ue5_status", "Disconnected ✗")
+        dpg.configure_item("ue5_status", color=(200, 80, 80))
+        return
+
+    # 发送参数
+    result = send_to_ue5()
+    if result["ok"]:
+        dpg.set_value("status", "Sent to UE5!")
+    else:
+        dpg.set_value("status", result.get("error", "Send failed"))
+
+
+# =============================================================================
+# 批量处理功能
+# =============================================================================
+
+batch_images = []
+batch_results = []
+
+
+def on_batch_folder_select(sender, app_data):
+    """选择批量处理文件夹"""
+    global batch_images, batch_results
+
+    folder_path = app_data.get("file_path_name", "") if isinstance(app_data, dict) else ""
+    if not folder_path or not os.path.isdir(folder_path):
+        dpg.set_value("status", "Invalid folder")
+        return
+
+    # 收集所有图片
+    batch_images = []
+    valid_exts = {'.png', '.jpg', '.jpeg', '.bmp', '.webp'}
+
+    for f in os.listdir(folder_path):
+        if os.path.splitext(f)[1].lower() in valid_exts:
+            batch_images.append(os.path.join(folder_path, f))
+
+    batch_results = []
+    dpg.set_value("batch_info", f"Found {len(batch_images)} images")
+    dpg.set_value("status", f"Loaded {len(batch_images)} images for batch processing")
+
+
+def run_batch_process():
+    """执行批量处理"""
+    global batch_results
+
+    if not batch_images:
+        return
+
+    if engine is None:
+        dpg.set_value("status", "No model loaded")
+        return
+
+    from PIL import Image
+    MEAN, STD = np.array([0.485, 0.456, 0.406]), np.array([0.229, 0.224, 0.225])
+
+    batch_results = []
+
+    for i, img_path in enumerate(batch_images):
+        try:
+            img = cv2.imread(img_path)
+            if img is None:
+                continue
+
+            x = np.array(Image.fromarray(img).convert("RGB").resize((224, 224)), dtype=np.float32) / 255.0
+            x = ((x - MEAN) / STD).astype(np.float32).transpose(2, 0, 1)[np.newaxis, :]
+
+            preds = engine.run(["params"], {engine.get_inputs()[0].name: x})[0][0]
+
+            result = {
+                "file": os.path.basename(img_path),
+                "params": preds.tolist()
+            }
+            batch_results.append(result)
+
+            dpg.set_value("batch_info", f"Processing: {i+1}/{len(batch_images)}")
+
+        except Exception as e:
+            print(f"[Batch] Error processing {img_path}: {e}")
+
+    # 保存结果
+    output_path = os.path.join(os.path.dirname(__file__), "..", "data", "batch_results.json")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, 'w') as f:
+        json.dump(batch_results, f, indent=2)
+
+    dpg.set_value("status", f"Batch done: {len(batch_results)} results saved")
+    dpg.set_value("batch_info", f"Processed: {len(batch_results)}/{len(batch_images)}")
+
+
+def on_batch_process(sender, app_data):
+    """批量处理按钮回调"""
+    run_batch_process()
+
+
 def on_rotation_speed(sender, app_data):
     """Change rotation speed"""
     global rotation_speed
@@ -1512,8 +1668,13 @@ def build():
                         tag="skybox_fdlg", width=500, height=300):
         dpg.add_file_extension("Images{.png,.jpg,.jpeg,.bmp,.webp}", color=(80, 180, 220))
 
+    # 批量处理文件夹选择器
+    with dpg.file_dialog(directory_selector=True, show=False, callback=on_batch_folder_select,
+                        tag="batch_fdlg", width=500, height=300):
+        pass
+
     with dpg.window(tag="main"):
-        dpg.add_text("AutoToon Studio — Industrial Skybox Preview", color=(70, 140, 210))
+        dpg.add_text("AutoToon Studio — Skybox v2.1 + UE5", color=(70, 140, 210))
         dpg.add_separator()
 
         with dpg.group(horizontal=True):
@@ -1532,6 +1693,22 @@ def build():
                     dpg.add_text("Brush:")
                     dpg.add_slider_int(tag="bsize", default_value=20, min_value=5, max_value=50, width=120,
                                       callback=lambda s,a: globals().__setitem__('brush_size', a))
+
+                # UE5 Connection
+                dpg.add_separator()
+                dpg.add_text("UE5 Connection", color=(140, 140, 150))
+                with dpg.group(horizontal=True):
+                    dpg.add_button(label="Check", callback=on_check_ue5, width=60)
+                    dpg.add_button(label="Send", callback=on_send_ue5, width=60)
+                    dpg.add_text("Disconnected ✗", tag="ue5_status", color=(200, 80, 80))
+
+                # Batch Processing
+                dpg.add_separator()
+                dpg.add_text("Batch Process", color=(140, 140, 150))
+                with dpg.group(horizontal=True):
+                    dpg.add_button(label="Select Folder", callback=lambda: dpg.show_item("batch_fdlg"), width=90)
+                    dpg.add_button(label="Run", callback=on_batch_process, width=50)
+                dpg.add_text("No folder selected", tag="batch_info", color=(100, 100, 100))
 
                 # 截图和推理按钮
                 with dpg.group(horizontal=True):
@@ -1799,7 +1976,8 @@ def run():
             # Sync angle slider (only every few frames to reduce UI overhead)
             frame_count += 1
             if frame_count % 3 == 0:
-                dpg.set_value("rot_angle", rotation_angle)
+                if dpg.does_item_exist("rot_angle"):
+                    dpg.set_value("rot_angle", rotation_angle)
                 update_shape()
 
         dpg.render_dearpygui_frame()
