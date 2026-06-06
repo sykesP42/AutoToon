@@ -1,5 +1,5 @@
 // MooaToon HTTP Server
-// 在 127.0.0.1:8080 启动本地 HTTP 服务，供 AutoToonStudio 发送风格参数。
+// 在 127.0.0.1:4848 启动本地 HTTP 服务,供 AutoToonStudio 发送风格参数。
 
 #pragma once
 
@@ -13,7 +13,7 @@ class MOOATOONINFERENCE_API FMooaToonHttpServer
 {
 public:
 	/** 启动 HTTP 服务（绑定端口） */
-	bool Start(int32 Port = 8080);
+	bool Start(int32 Port = 4848);
 
 	/** 停止 HTTP 服务 */
 	void Stop();
