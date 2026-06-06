@@ -14,3 +14,6 @@ numpy>=1.24
 
 # HTTP 通信
 requests>=2.31
+
+# WebSocket 实时通信
+websockets>=12.0
