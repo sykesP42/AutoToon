@@ -17,6 +17,14 @@ except Exception as e:
     ue_client = None
     print(f"[UE5] Client not available: {e}")
 
+# WebSocket 客户端
+try:
+    from ws_client import UE5WebSocketClient
+    ws_client = UE5WebSocketClient()
+except Exception as e:
+    ws_client = None
+    print(f"[WS] WebSocket client not available: {e}")
+
 VIEWER_SIZE = 400
 
 # 全局状态
@@ -84,6 +92,11 @@ SHAPE_LABELS = {
 compare_mode = False  # 是否显示对比视图
 compare_shape_a = "sphere"
 compare_shape_b = "cube"
+
+# 实时联动状态
+realtime_sync = False  # 实时联动开关
+_updating_from_ue5 = False  # 防止循环触发标志
+ws_latency = 0  # WebSocket 延迟 (ms)
 
 
 # =============================================================================
@@ -1587,6 +1600,114 @@ def on_send_ue5(sender, app_data):
 
 
 # =============================================================================
+# 实时联动功能
+# =============================================================================
+
+def on_realtime_sync_toggle(sender, app_data):
+    """实时联动开关回调"""
+    global realtime_sync
+
+    realtime_sync = app_data
+
+    if realtime_sync:
+        # 启动 WebSocket 客户端
+        if ws_client:
+            ws_client.on_params_received(on_ws_params_received)
+            ws_client.on_connected(on_ws_connected)
+            ws_client.on_disconnected(on_ws_disconnected)
+            ws_client.start()
+            dpg.set_value("status", "Real-time sync enabled")
+        else:
+            dpg.set_value("status", "WebSocket not available")
+            dpg.set_value("realtime_sync_checkbox", False)
+            realtime_sync = False
+    else:
+        # 停止 WebSocket 客户端
+        if ws_client:
+            ws_client.stop()
+        dpg.set_value("ws_status", "Disabled")
+        dpg.configure_item("ws_status", color=(150, 150, 150))
+
+
+def on_ws_params_received(params: dict):
+    """WebSocket 参数接收回调"""
+    global _updating_from_ue5, material
+
+    _updating_from_ue5 = True
+
+    try:
+        # 更新材质参数
+        if "shadow_r" in params:
+            material["shadow_r"] = params["shadow_r"]
+            dpg.set_value("slider_shadow_r", params["shadow_r"])
+        if "shadow_g" in params:
+            material["shadow_g"] = params["shadow_g"]
+            dpg.set_value("slider_shadow_g", params["shadow_g"])
+        if "shadow_b" in params:
+            material["shadow_b"] = params["shadow_b"]
+            dpg.set_value("slider_shadow_b", params["shadow_b"])
+        if "specular" in params:
+            material["specular"] = params["specular"]
+            dpg.set_value("slider_specular", params["specular"])
+        if "rim" in params:
+            material["rim"] = params["rim"]
+            dpg.set_value("slider_rim", params["rim"])
+        if "outline" in params:
+            material["outline"] = params["outline"]
+            dpg.set_value("slider_outline", params["outline"])
+        if "sss" in params:
+            material["sss"] = params["sss"]
+            dpg.set_value("slider_sss", params["sss"])
+        if "aniso" in params:
+            material["aniso"] = params["aniso"]
+            dpg.set_value("slider_aniso", params["aniso"])
+        if "metallic" in params:
+            material["metallic"] = params["metallic"]
+            dpg.set_value("slider_metallic", params["metallic"])
+        if "roughness" in params:
+            material["roughness"] = params["roughness"]
+            dpg.set_value("slider_roughness", params["roughness"])
+
+        dpg.set_value("status", "Params updated from UE5")
+
+    finally:
+        _updating_from_ue5 = False
+
+
+def on_ws_connected():
+    """WebSocket 连接成功回调"""
+    dpg.set_value("ws_status", "Connected")
+    dpg.configure_item("ws_status", color=(80, 200, 80))
+
+
+def on_ws_disconnected():
+    """WebSocket 断开连接回调"""
+    dpg.set_value("ws_status", "Disconnected")
+    dpg.configure_item("ws_status", color=(200, 80, 80))
+
+
+def send_params_realtime():
+    """实时发送参数到 UE5（通过 WebSocket）"""
+    if not realtime_sync or not ws_client or not ws_client.connected:
+        return
+
+    params = {
+        "shadow_r": material["shadow_r"],
+        "shadow_g": material["shadow_g"],
+        "shadow_b": material["shadow_b"],
+        "specular": material["specular"],
+        "rim": material["rim"],
+        "outline": material["outline"],
+        "sss": material["sss"],
+        "aniso": material["aniso"],
+        "metallic": material["metallic"],
+        "roughness": material["roughness"],
+    }
+
+    ws_client.send_params(params)
+
+
+# =============================================================================
 # 批量处理功能
 # =============================================================================
 
@@ -1807,6 +1928,22 @@ def build():
                     dpg.add_button(label="Check", callback=on_check_ue5, width=60)
                     dpg.add_button(label="Send", callback=on_send_ue5, width=60)
                     dpg.add_text("Disconnected ✗", tag="ue5_status", color=(200, 80, 80))
+
+                # 实时联动区域
+                dpg.add_separator()
+                dpg.add_spacer(height=5)
+
+                with dpg.group(horizontal=True):
+                    dpg.add_checkbox(
+                        label="Real-time Sync (WebSocket)",
+                        tag="realtime_sync_checkbox",
+                        default_value=False,
+                        callback=on_realtime_sync_toggle
+                    )
+
+                with dpg.group(horizontal=True):
+                    dpg.add_text("WebSocket:", color=(150, 150, 150))
+                    dpg.add_text("Disabled", tag="ws_status", color=(150, 150, 150))
 
                 # Compare View
                 dpg.add_separator()
