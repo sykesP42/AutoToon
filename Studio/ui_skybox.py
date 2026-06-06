@@ -1866,6 +1866,10 @@ def make_param_callback(key):
         material[key] = a
         print(f"[Param] {key} = {a:.3f}")
         update_shape()
+
+        # 实时联动发送
+        if realtime_sync and ws_client and ws_client.connected and not _updating_from_ue5:
+            send_params_realtime()
     return callback
 
 
