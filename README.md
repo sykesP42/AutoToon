@@ -4,7 +4,7 @@
 
 AI-assisted UE5 real-time stylization tool — upload a reference image, automatically extract style parameters, and apply to your UE5 scene in one click.
 
-**Current Version: v2.1.0**
+**Current Version: v2.3.0**
 
 ---
 
@@ -22,6 +22,7 @@ AI 辅助的 UE5 实时风格化工具 — 上传参考图，自动提取风格�
 - **Camera Control** - Mouse drag rotation + slider controls
 - **Style Presets** - Save/Load material configurations
 - **UE5 Integration** - HTTP communication with UE5 plugin
+- **Real-time Sync** - WebSocket-based bidirectional parameter sync with UE5
 - **Batch Processing** - Folder-based AI inference for multiple images
 - **Keyboard Shortcuts** - 1-6 shapes, R reset camera, M reset material, Space auto-rotate
 - **Screenshot Export** - PNG with timestamp
@@ -113,7 +114,7 @@ Double-click `start_autotoon.bat` to launch Studio and get prompted to open UE5.
 | CPU Rendering | NumPy vectorized computation |
 | AI Inference | onnxruntime (ResNet18) |
 | Image Preview | OpenCV tone mapping |
-| UE5 Communication | HTTP (requests ↔ HttpServer) |
+| UE5 Communication | HTTP (4848) + WebSocket (4849) |
 | UE5 Plugin | C++ + NNE + Json |
 | i18n | Chinese / English |
 
@@ -124,7 +125,7 @@ Double-click `start_autotoon.bat` to launch Studio and get prompted to open UE5.
 
 AI-assisted UE5 real-time stylization tool — upload a reference image, automatically extract style parameters, and apply to your UE5 scene in one click.
 
-**Current Version: v2.1.0**
+**Current Version: v2.3.0**
 
 ### Features
 
@@ -135,6 +136,7 @@ AI-assisted UE5 real-time stylization tool — upload a reference image, automat
 - **Camera Control** - Mouse drag rotation + slider controls
 - **Style Presets** - Save/Load material configurations
 - **UE5 Integration** - HTTP communication with UE5 plugin
+- **Real-time Sync** - WebSocket-based bidirectional parameter sync with UE5
 - **Batch Processing** - Folder-based AI inference for multiple images
 - **Keyboard Shortcuts** - 1-6 shapes, R reset camera, M reset material, Space auto-rotate
 - **Screenshot Export** - PNG with timestamp
@@ -226,6 +228,6 @@ Double-click `start_autotoon.bat` to launch Studio and get prompted to open UE5.
 | CPU Rendering | NumPy vectorized computation |
 | AI Inference | onnxruntime (ResNet18) |
 | Image Preview | OpenCV tone mapping |
-| UE5 Communication | HTTP (requests ↔ HttpServer) |
+| UE5 Communication | HTTP (4848) + WebSocket (4849) |
 | UE5 Plugin | C++ + NNE + Json |
 | i18n | Chinese / English |
