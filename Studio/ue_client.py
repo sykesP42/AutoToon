@@ -1,6 +1,7 @@
 """
 ue_client.py — UE5 HTTP 客户端
 通过 HTTP 与 UE5 插件通信：健康检查 + 发送风格参数。
+默认端口: 4848 (AutoToon)
 """
 import json
 import time
@@ -14,7 +15,7 @@ except ImportError:
 class UE5Client:
     """UE5 HTTP 通信客户端"""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8080, timeout: float = 3.0):
+    def __init__(self, host: str = "127.0.0.1", port: int = 4848, timeout: float = 3.0):
         if requests is None:
             raise ImportError("requests 未安装，请运行: pip install requests")
 
