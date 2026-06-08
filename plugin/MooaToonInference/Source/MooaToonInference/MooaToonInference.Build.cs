@@ -17,14 +17,16 @@ public class MooaToonInference : ModuleRules
 			"SlateCore",
 			"HTTP",
 			"Json",
-			"JsonUtilities"
+			"JsonUtilities",
+			"WebSockets"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"NNERuntimeORT",
 			"ImageWrapper",
-			"HTTPServer"
+			"HTTPServer",
+			"WebSocketServer"
 		});
 	}
 }
