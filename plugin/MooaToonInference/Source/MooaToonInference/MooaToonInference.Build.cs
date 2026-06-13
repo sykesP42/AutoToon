@@ -26,7 +26,8 @@ public class MooaToonInference : ModuleRules
 			"NNERuntimeORT",
 			"ImageWrapper",
 			"HTTPServer",
-			"WebSocketServer"
+			"WebSocketServer",
+			"WebSocketNetworking"
 		});
 	}
 }
