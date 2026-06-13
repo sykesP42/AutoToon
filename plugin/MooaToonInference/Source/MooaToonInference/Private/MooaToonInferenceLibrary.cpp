@@ -1,6 +1,7 @@
 // MooaToon Inference Plugin
 
 #include "MooaToonInferenceLibrary.h"
+#include "MooaToonInferenceModule.h"
 #include "NNE.h"
 #include "NNEModelData.h"
 #include "NNERuntimeCPU.h"
@@ -265,6 +266,31 @@ void UMooaToonInferenceLibrary::SetMooaToonParams(
 	UE_LOG(LogMooaToon, Log,
 		TEXT("[MooaToon] SetMooaToonParams 完成: 主体材质 %d/%d 槽"),
 		AppliedCount, NumMaterials);
+
+	// =========================================================================
+	// 部分 C：通过 WebSocket 广播参数到 Studio（双向同步）
+	// =========================================================================
+	if (FMooaToonWebSocketServer* WsServer = FMooaToonInferenceModule::GetWebSocketServer())
+	{
+		if (WsServer->IsRunning())
+		{
+			// 构建 JSON 参数对象
+			TSharedPtr<FJsonObject> ParamsJson = MakeShareable(new FJsonObject);
+			ParamsJson->SetNumberField(TEXT("shadow_r"), ShadowColor.R);
+			ParamsJson->SetNumberField(TEXT("shadow_g"), ShadowColor.G);
+			ParamsJson->SetNumberField(TEXT("shadow_b"), ShadowColor.B);
+			ParamsJson->SetNumberField(TEXT("specular"), Specular);
+			ParamsJson->SetNumberField(TEXT("rim"), RimLightWidth);
+			ParamsJson->SetNumberField(TEXT("outline"), WidthScale);
+			ParamsJson->SetNumberField(TEXT("sss"), 0.0f);
+			ParamsJson->SetNumberField(TEXT("aniso"), 0.0f);
+			ParamsJson->SetNumberField(TEXT("metallic"), 0.0f);
+			ParamsJson->SetNumberField(TEXT("roughness"), 0.5f);
+
+			WsServer->BroadcastParams(ParamsJson);
+			UE_LOG(LogMooaToon, Log, TEXT("[MooaToon] 参数已广播到 Studio"));
+		}
+	}
 }
 
 bool UMooaToonInferenceLibrary::InferAndApply(
