@@ -21,8 +21,9 @@ AI 辅助的 UE5 实时风格化工具 — 上传参考图，自动提取风格�
 - **Advanced Rendering** - SSS, Anisotropic Specular, Metallic, Roughness parameters
 - **Camera Control** - Mouse drag rotation + slider controls
 - **Style Presets** - Save/Load material configurations
-- **UE5 Integration** - HTTP communication with UE5 plugin
-- **Real-time Sync** - WebSocket-based bidirectional parameter sync with UE5
+- **UE5 Integration** - HTTP (4848) + WebSocket (4849) communication
+- **Real-time Sync** - Bidirectional parameter sync with UE5 via WebSocket
+- **Live Preview** - Real-time UE5 viewport screenshot in Studio
 - **Batch Processing** - Folder-based AI inference for multiple images
 - **Keyboard Shortcuts** - 1-6 shapes, R reset camera, M reset material, Space auto-rotate
 - **Screenshot Export** - PNG with timestamp
@@ -98,8 +99,16 @@ python ui_fast.py          # Fast CPU rendering
 
 1. Copy `plugin/MooaToonInference/` into your UE5 project `Plugins/` directory
 2. Build the UE5 project
-3. The plugin auto-starts an HTTP server at `127.0.0.1:8080`
-4. Click "Check UE5 Connection" in Studio
+3. Start PIE (Play In Editor)
+4. The plugin auto-starts servers:
+   - HTTP Server: `127.0.0.1:4848`
+   - WebSocket Server: `127.0.0.1:4849`
+5. In Studio:
+   - Click "Check UE5" to verify HTTP connection
+   - Enable "Real-time Sync" for WebSocket bidirectional sync
+   - Enable "UE5 Preview" for live viewport display
+
+See [docs/realtime_sync_guide.md](docs/realtime_sync_guide.md) for detailed usage.
 
 #### 4. One-Click Launch
 
@@ -135,8 +144,9 @@ AI-assisted UE5 real-time stylization tool — upload a reference image, automat
 - **Advanced Rendering** - SSS, Anisotropic Specular, Metallic, Roughness parameters
 - **Camera Control** - Mouse drag rotation + slider controls
 - **Style Presets** - Save/Load material configurations
-- **UE5 Integration** - HTTP communication with UE5 plugin
-- **Real-time Sync** - WebSocket-based bidirectional parameter sync with UE5
+- **UE5 Integration** - HTTP (4848) + WebSocket (4849) communication
+- **Real-time Sync** - Bidirectional parameter sync with UE5 via WebSocket
+- **Live Preview** - Real-time UE5 viewport screenshot in Studio
 - **Batch Processing** - Folder-based AI inference for multiple images
 - **Keyboard Shortcuts** - 1-6 shapes, R reset camera, M reset material, Space auto-rotate
 - **Screenshot Export** - PNG with timestamp
@@ -212,8 +222,16 @@ python ui_fast.py          # Fast CPU rendering
 
 1. Copy `plugin/MooaToonInference/` into your UE5 project `Plugins/` directory
 2. Build the UE5 project
-3. The plugin auto-starts an HTTP server at `127.0.0.1:8080`
-4. Click "Check UE5 Connection" in Studio
+3. Start PIE (Play In Editor)
+4. The plugin auto-starts servers:
+   - HTTP Server: `127.0.0.1:4848`
+   - WebSocket Server: `127.0.0.1:4849`
+5. In Studio:
+   - Click "Check UE5" to verify HTTP connection
+   - Enable "Real-time Sync" for WebSocket bidirectional sync
+   - Enable "UE5 Preview" for live viewport display
+
+See [docs/realtime_sync_guide.md](docs/realtime_sync_guide.md) for detailed usage.
 
 #### 4. One-Click Launch
 
