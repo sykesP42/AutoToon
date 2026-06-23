@@ -2,6 +2,10 @@
 ws_client.py — UE5 WebSocket 客户端
 实现与 UE5 插件的实时双向通信。
 默认端口: 4849 (AutoToon WebSocket)
+
+支持消息类型:
+- 文本消息 (JSON): params_update, ping/pong, start_screenshot, stop_screenshot
+- 二进制消息: 截图传输 (IMG + JPEG)
 """
 import asyncio
 import json
@@ -14,12 +18,19 @@ try:
 except ImportError:
     websockets = None
 
+try:
+    import numpy as np
+    import cv2
+except ImportError:
+    np = None
+    cv2 = None
+
 
 class UE5WebSocketClient:
     """UE5 WebSocket 客户端
 
     负责与 UE5 插件的 WebSocket 服务器建立连接，
-    发送材质参数，接收参数更新。
+    发送材质参数，接收参数更新和截图。
     """
 
     def __init__(self, host: str = "127.0.0.1", port: int = 4849):
@@ -37,6 +48,7 @@ class UE5WebSocketClient:
         self._on_params_callbacks: list[Callable[[dict], None]] = []
         self._on_connected_callbacks: list[Callable[[], None]] = []
         self._on_disconnected_callbacks: list[Callable[[], None]] = []
+        self._on_screenshot_callbacks: list[Callable[[any], None]] = []  # 截图回调
 
         # 异步循环和线程
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -65,6 +77,14 @@ class UE5WebSocketClient:
     def on_disconnected(self, callback: Callable[[], None]):
         """注册断开连接回调"""
         self._on_disconnected_callbacks.append(callback)
+
+    def on_screenshot_received(self, callback: Callable[[any], None]):
+        """注册截图接收回调
+
+        Args:
+            callback: 回调函数，接收 numpy.ndarray (BGR 格式) 或 bytes
+        """
+        self._on_screenshot_callbacks.append(callback)
 
     def start(self):
         """启动 WebSocket 客户端（在后台线程中运行）"""
@@ -160,8 +180,14 @@ class UE5WebSocketClient:
         finally:
             self.connected = False
 
-    async def _handle_message(self, message: str):
-        """处理接收到的消息"""
+    async def _handle_message(self, message):
+        """处理接收到的消息（支持文本和二进制）"""
+        # 检查是否为二进制消息（截图）
+        if isinstance(message, bytes):
+            await self._handle_binary_message(message)
+            return
+
+        # 处理文本消息（JSON）
         try:
             data = json.loads(message)
             msg_type = data.get("type")
@@ -185,6 +211,47 @@ class UE5WebSocketClient:
             print(f"[WS] JSON 解析失败: {message[:100]}")
         except Exception as e:
             print(f"[WS] 消息处理错误: {e}")
+
+    async def _handle_binary_message(self, data: bytes):
+        """处理二进制消息（截图）
+
+        消息格式: [IMG] + [类型] + [图片数据]
+        - 字节 0-2: "IMG" (魔术字)
+        - 字节 3: 格式类型 (0x01 = JPEG)
+        - 字节 4+: 图片数据
+        """
+        try:
+            # 检查消息头
+            if len(data) < 5:
+                print(f"[WS] Binary message too short: {len(data)} bytes")
+                return
+
+            if data[:3] != b'IMG':
+                print(f"[WS] Unknown binary message format")
+                return
+
+            format_type = data[3]  # 0x01 = JPEG
+            image_data = data[4:]
+
+            # 解码图片
+            img = None
+            if np is not None and cv2 is not None:
+                nparr = np.frombuffer(image_data, dtype=np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+            if img is None:
+                # 无法解码，直接传递原始数据
+                img = image_data
+
+            # 触发回调
+            for cb in self._on_screenshot_callbacks:
+                try:
+                    cb(img)
+                except Exception as e:
+                    print(f"[WS] 截图回调错误: {e}")
+
+        except Exception as e:
+            print(f"[WS] 二进制消息处理错误: {e}")
 
     def send_params(self, params: dict):
         """发送材质参数（线程安全）
@@ -225,3 +292,46 @@ class UE5WebSocketClient:
             )
         except Exception as e:
             print(f"[WS] Ping 发送失败: {e}")
+
+    def start_screenshot(self, interval: float = 0.1):
+        """开始实时截图
+
+        Args:
+            interval: 截图间隔（秒），默认 0.1 (10 FPS)
+        """
+        if not self.connected or not self.ws or not self._loop:
+            return
+
+        message = {
+            "type": "start_screenshot",
+            "interval": interval,
+            "timestamp": int(time.time() * 1000)
+        }
+
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.ws.send(json.dumps(message)),
+                self._loop
+            )
+            print(f"[WS] Started screenshot: interval={interval}s")
+        except Exception as e:
+            print(f"[WS] 启动截图失败: {e}")
+
+    def stop_screenshot(self):
+        """停止实时截图"""
+        if not self.connected or not self.ws or not self._loop:
+            return
+
+        message = {
+            "type": "stop_screenshot",
+            "timestamp": int(time.time() * 1000)
+        }
+
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.ws.send(json.dumps(message)),
+                self._loop
+            )
+            print(f"[WS] Stopped screenshot")
+        except Exception as e:
+            print(f"[WS] 停止截图失败: {e}")

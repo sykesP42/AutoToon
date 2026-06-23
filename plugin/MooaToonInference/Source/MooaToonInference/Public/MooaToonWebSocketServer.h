@@ -2,6 +2,7 @@
 // 在 127.0.0.1:4849 启动 WebSocket 服务，实现实时双向通信。
 //
 // 使用 UE5 原生 IWebSocketServer API 实现 WebSocket 服务器。
+// 支持实时截图传输（二进制消息）。
 
 #pragma once
 
@@ -42,12 +43,13 @@ struct FMooaToonWSClient
  *
  * 协议:
  * - 端口: 4849
- * - 消息格式: JSON
+ * - 消息格式: JSON (文本) / Binary (截图)
  *
  * 消息类型:
- * - params_update: 材质参数更新
- * - ping/pong: 心跳检测
- * - welcome: 连接欢迎消息
+ * - params_update: 材质参数更新 (JSON)
+ * - ping/pong: 心跳检测 (JSON)
+ * - welcome: 连接欢迎消息 (JSON)
+ * - screenshot: 视口截图 (Binary: IMG + JPEG)
  */
 class MOOATOONINFERENCE_API FMooaToonWebSocketServer
 {
@@ -79,6 +81,22 @@ public:
 
 	/** 发送消息到指定客户端 */
 	bool SendToClient(const FString& ClientId, const FString& Message);
+
+	// ==========================================================================
+	// 实时截图功能
+	// ==========================================================================
+
+	/** 捕获并发送截图 */
+	void CaptureAndSendScreenshot();
+
+	/** 开始定时截图 */
+	void StartPeriodicScreenshot(float IntervalSeconds = 0.1f);
+
+	/** 停止定时截图 */
+	void StopPeriodicScreenshot();
+
+	/** 是否正在截图 */
+	bool IsScreenshotEnabled() const { return bScreenshotEnabled; }
 
 	/** 参数接收回调委托 */
 	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnParamsReceived, const TSharedPtr<FJsonObject>&, const FString& /*ClientId*/);
@@ -136,6 +154,12 @@ private:
 	/** 发送欢迎消息 */
 	void SendWelcomeMessage(INetworkingWebSocket* Socket, const FString& ClientId);
 
+	/** 发送二进制消息到所有客户端 */
+	void BroadcastBinaryMessage(const TArray<uint8>& Data);
+
+	/** 编码截图为 JPEG */
+	bool EncodeScreenshotToJPEG(TArray<FColor>& Bitmap, int32 Width, int32 Height, TArray<uint8>& OutData);
+
 	// ==========================================================================
 	// 成员变量
 	// ==========================================================================
@@ -160,4 +184,23 @@ private:
 
 	/** 连接回调句柄 */
 	FDelegateHandle ClientConnectedHandle;
+
+	// ==========================================================================
+	// 截图相关成员
+	// ==========================================================================
+
+	/** 截图定时器句柄 */
+	FTimerHandle ScreenshotTimerHandle;
+
+	/** 截图功能是否启用 */
+	bool bScreenshotEnabled = false;
+
+	/** 截图间隔（秒） */
+	float ScreenshotInterval = 0.1f;
+
+	/** 截图最大分辨率 */
+	int32 MaxScreenshotSize = 640;
+
+	/** JPEG 编码质量 */
+	int32 JPEGQuality = 75;
 };

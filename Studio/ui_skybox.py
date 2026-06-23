@@ -98,6 +98,10 @@ realtime_sync = False  # 实时联动开关
 _updating_from_ue5 = False  # 防止循环触发标志
 ws_latency = 0  # WebSocket 延迟 (ms)
 
+# UE5 预览状态
+ue5_preview_enabled = False  # UE5 预览开关
+ue5_preview_image = None  # UE5 截图数据
+
 
 # =============================================================================
 # Skybox 预设 - 工业级渲染背景
@@ -1708,6 +1712,86 @@ def send_params_realtime():
 
 
 # =============================================================================
+# UE5 实时预览功能
+# =============================================================================
+
+def on_ue5_screenshot_received(img):
+    """接收到 UE5 截图的回调
+
+    Args:
+        img: numpy.ndarray (BGR) 或 bytes
+    """
+    global ue5_preview_image
+
+    if img is None:
+        return
+
+    # 保存截图
+    ue5_preview_image = img.copy() if isinstance(img, np.ndarray) else img
+
+    # 更新预览显示
+    update_ue5_preview()
+
+
+def update_ue5_preview():
+    """更新 UE5 预览显示"""
+    global ue5_preview_image
+
+    if ue5_preview_image is None:
+        return
+
+    # 如果是原始 bytes，先解码
+    if isinstance(ue5_preview_image, bytes):
+        if np is not None and cv2 is not None:
+            nparr = np.frombuffer(ue5_preview_image, dtype=np.uint8)
+            ue5_preview_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        else:
+            return
+
+    # 转换格式: BGR → RGBA → float32
+    try:
+        rgba = cv2.cvtColor(ue5_preview_image, cv2.COLOR_BGR2RGBA).astype(np.float32) / 255.0
+        h, w = rgba.shape[:2]
+
+        # 更新纹理
+        if dpg.does_item_exist("ue5_preview_tex"):
+            dpg.set_value("ue5_preview_tex", rgba.ravel().tolist())
+        else:
+            # 创建新纹理
+            with dpg.texture_registry():
+                dpg.add_dynamic_texture(w, h, rgba.ravel().tolist(), tag="ue5_preview_tex")
+    except Exception as e:
+        print(f"[UE5 Preview] 更新失败: {e}")
+
+
+def on_ue5_preview_toggle(sender, app_data):
+    """开关 UE5 实时预览"""
+    global ue5_preview_enabled
+
+    ue5_preview_enabled = app_data
+
+    if ue5_preview_enabled:
+        # 开始预览
+        if ws_client and ws_client.connected:
+            ws_client.start_screenshot(interval=0.1)  # 10 FPS
+            dpg.set_value("ue5_preview_status", "Running (10 FPS)")
+        else:
+            dpg.set_value("ue5_preview_status", "WebSocket not connected")
+            dpg.set_value("ue5_preview_checkbox", False)
+            ue5_preview_enabled = False
+    else:
+        # 停止预览
+        if ws_client and ws_client.connected:
+            ws_client.stop_screenshot()
+        dpg.set_value("ue5_preview_status", "Stopped")
+
+
+# 注册截图回调
+if ws_client:
+    ws_client.on_screenshot_received(on_ue5_screenshot_received)
+
+
+# =============================================================================
 # 批量处理功能
 # =============================================================================
 
@@ -1888,6 +1972,8 @@ def build():
     with dpg.texture_registry():
         dpg.add_dynamic_texture(VIEWER_SIZE, VIEWER_SIZE, [0.1]*4*VIEWER_SIZE**2, tag="ref_tex")
         dpg.add_dynamic_texture(VIEWER_SIZE, VIEWER_SIZE, [0.1]*4*VIEWER_SIZE**2, tag="sphere_tex")
+        # UE5 预览纹理 (初始为黑色)
+        dpg.add_dynamic_texture(280, 200, [0.1]*4*280*200, tag="ue5_preview_tex")
 
     # 参考图文件选择器
     with dpg.file_dialog(directory_selector=False, show=False, callback=on_file_select,
@@ -1948,6 +2034,24 @@ def build():
                 with dpg.group(horizontal=True):
                     dpg.add_text("WebSocket:", color=(150, 150, 150))
                     dpg.add_text("Disabled", tag="ws_status", color=(150, 150, 150))
+
+                # UE5 实时预览
+                dpg.add_separator()
+                dpg.add_spacer(height=5)
+                dpg.add_text("UE5 Preview", color=(140, 140, 150))
+
+                with dpg.group(horizontal=True):
+                    dpg.add_checkbox(
+                        label="Enable",
+                        tag="ue5_preview_checkbox",
+                        default_value=False,
+                        callback=on_ue5_preview_toggle
+                    )
+                    dpg.add_text("Stopped", tag="ue5_preview_status", color=(100, 100, 100))
+
+                # UE5 预览窗口
+                with dpg.child_window(height=200, width=280):
+                    dpg.add_image("ue5_preview_tex", tag="ue5_preview_image", width=280, height=200)
 
                 # Compare View
                 dpg.add_separator()

@@ -1,5 +1,6 @@
 // MooaToon WebSocket Server Implementation
 // 使用 UE5 原生 IWebSocketServer API 实现 WebSocket 服务器
+// 支持实时截图传输
 
 #include "MooaToonWebSocketServer.h"
 #include "MooaToonInferenceLibrary.h"
@@ -9,6 +10,12 @@
 #include "Serialization/JsonWriter.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/Guid.h"
+#include "Engine/GameViewportClient.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
+#include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY(LogMooaToonWS);
 
@@ -294,6 +301,18 @@ void FMooaToonWebSocketServer::ProcessJsonMessage(const FString& JsonStr, const 
 			}
 		}
 	}
+	else if (Type == TEXT("start_screenshot"))
+	{
+		// 开始定时截图
+		float Interval = 0.1f;
+		Json->TryGetNumberField(TEXT("interval"), Interval);
+		StartPeriodicScreenshot(Interval);
+	}
+	else if (Type == TEXT("stop_screenshot"))
+	{
+		// 停止定时截图
+		StopPeriodicScreenshot();
+	}
 	else
 	{
 		UE_LOG(LogMooaToonWS, Warning, TEXT("[WS] Unknown message type: %s"), *Type);
@@ -464,4 +483,187 @@ bool FMooaToonWebSocketServer::SendToClient(const FString& ClientId, const FStri
 
 	UE_LOG(LogMooaToonWS, Warning, TEXT("[WS] Client not found: %s"), *ClientId);
 	return false;
+}
+
+// =============================================================================
+// 实时截图功能
+// =============================================================================
+
+void FMooaToonWebSocketServer::CaptureAndSendScreenshot()
+{
+	if (!bRunning || GetClientCount() == 0)
+	{
+		return;
+	}
+
+	// 1. 获取游戏视口
+	UGameViewportClient* ViewportClient = GEngine ? GEngine->GameViewport : nullptr;
+	if (!ViewportClient || !ViewportClient->Viewport)
+	{
+		UE_LOG(LogMooaToonWS, Verbose, TEXT("[WS] No viewport available for screenshot"));
+		return;
+	}
+
+	FViewport* Viewport = ViewportClient->Viewport;
+	FIntPoint ViewportSize = Viewport->GetSizeXY();
+
+	if (ViewportSize.X <= 0 || ViewportSize.Y <= 0)
+	{
+		return;
+	}
+
+	// 2. 计算缩放（限制最大分辨率）
+	int32 CaptureWidth = ViewportSize.X;
+	int32 CaptureHeight = ViewportSize.Y;
+
+	if (CaptureWidth > MaxScreenshotSize || CaptureHeight > MaxScreenshotSize)
+	{
+		float Scale = (float)MaxScreenshotSize / FMath::Max(CaptureWidth, CaptureHeight);
+		CaptureWidth = FMath::RoundToInt(CaptureWidth * Scale);
+		CaptureHeight = FMath::RoundToInt(CaptureHeight * Scale);
+	}
+
+	// 3. 读取像素数据
+	TArray<FColor> Bitmap;
+	FReadSurfaceDataFlags ReadFlags(RCM_UNorm, CubeFace_MAX);
+	ReadFlags.SetLinearToGamma(false);
+
+	if (!Viewport->ReadPixels(Bitmap, ReadFlags))
+	{
+		UE_LOG(LogMooaToonWS, Warning, TEXT("[WS] ReadPixels failed"));
+		return;
+	}
+
+	// 4. 编码为 JPEG
+	TArray<uint8> JPEGData;
+	if (!EncodeScreenshotToJPEG(Bitmap, CaptureWidth, CaptureHeight, JPEGData))
+	{
+		UE_LOG(LogMooaToonWS, Warning, TEXT("[WS] JPEG encoding failed"));
+		return;
+	}
+
+	// 5. 构建二进制消息包（IMG + 类型 + 数据）
+	TArray<uint8> Packet;
+	Packet.Add('I');
+	Packet.Add('M');
+	Packet.Add('G');
+	Packet.Add(0x01);  // 0x01 = JPEG
+	Packet.Append(JPEGData);
+
+	// 6. 广播到所有客户端
+	BroadcastBinaryMessage(Packet);
+
+	UE_LOG(LogMooaToonWS, Verbose, TEXT("[WS] Sent screenshot: %dx%d, %d bytes"),
+		CaptureWidth, CaptureHeight, JPEGData.Num());
+}
+
+bool FMooaToonWebSocketServer::EncodeScreenshotToJPEG(
+	TArray<FColor>& Bitmap, int32 Width, int32 Height, TArray<uint8>& OutData)
+{
+	if (Bitmap.Num() == 0 || Width <= 0 || Height <= 0)
+	{
+		return false;
+	}
+
+	// 获取 ImageWrapper 模块
+	IImageWrapperModule& ImageWrapperModule =
+		FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+
+	TSharedPtr<IImageWrapper> ImageWrapper =
+		ImageWrapperModule.CreateImageWrapper(EImageFormat::JPEG);
+
+	if (!ImageWrapper.IsValid())
+	{
+		return false;
+	}
+
+	// 转换 FColor (BGRA) 到原始数据
+	TArray<uint8> RawData;
+	int32 PixelCount = Bitmap.Num();
+	RawData.SetNumUninitialized(PixelCount * 4);
+
+	for (int32 i = 0; i < PixelCount; i++)
+	{
+		RawData[i * 4 + 0] = Bitmap[i].B;
+		RawData[i * 4 + 1] = Bitmap[i].G;
+		RawData[i * 4 + 2] = Bitmap[i].R;
+		RawData[i * 4 + 3] = Bitmap[i].A;
+	}
+
+	// 设置原始数据
+	if (!ImageWrapper->SetRaw(RawData.GetData(), RawData.Num(), Width, Height, ERGBFormat::BGRA, 8))
+	{
+		return false;
+	}
+
+	// 压缩为 JPEG
+	OutData = ImageWrapper->GetCompressed(JPEGQuality);
+
+	return OutData.Num() > 0;
+}
+
+void FMooaToonWebSocketServer::BroadcastBinaryMessage(const TArray<uint8>& Data)
+{
+	if (!bRunning || Data.Num() == 0)
+	{
+		return;
+	}
+
+	FScopeLock Lock(&ClientsLock);
+
+	int32 SuccessCount = 0;
+	for (const auto& Client : Clients)
+	{
+		if (Client.WebSocket)
+		{
+			Client.WebSocket->Send(Data);
+			SuccessCount++;
+		}
+	}
+
+	UE_LOG(LogMooaToonWS, Verbose, TEXT("[WS] Binary broadcast: %d bytes to %d clients"),
+		Data.Num(), SuccessCount);
+}
+
+void FMooaToonWebSocketServer::StartPeriodicScreenshot(float IntervalSeconds)
+{
+	if (bScreenshotEnabled)
+	{
+		UE_LOG(LogMooaToonWS, Warning, TEXT("[WS] Screenshot already enabled"));
+		return;
+	}
+
+	bScreenshotEnabled = true;
+	ScreenshotInterval = FMath::Clamp(IntervalSeconds, 0.033f, 1.0f);
+
+	UE_LOG(LogMooaToonWS, Log, TEXT("[WS] Starting periodic screenshot: %.3f sec interval"),
+		ScreenshotInterval);
+
+	// 使用全局定时器管理器
+	if (GEngine && GEngine->GetWorld())
+	{
+		GEngine->GetWorld()->GetTimerManager().SetTimer(
+			ScreenshotTimerHandle,
+			FTimerDelegate::CreateRaw(this, &FMooaToonWebSocketServer::CaptureAndSendScreenshot),
+			ScreenshotInterval,
+			true  // 循环
+		);
+	}
+}
+
+void FMooaToonWebSocketServer::StopPeriodicScreenshot()
+{
+	if (!bScreenshotEnabled)
+	{
+		return;
+	}
+
+	bScreenshotEnabled = false;
+
+	UE_LOG(LogMooaToonWS, Log, TEXT("[WS] Stopped periodic screenshot"));
+
+	if (GEngine && GEngine->GetWorld())
+	{
+		GEngine->GetWorld()->GetTimerManager().ClearTimer(ScreenshotTimerHandle);
+	}
 }
